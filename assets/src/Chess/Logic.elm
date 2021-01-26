@@ -1,5 +1,7 @@
 module Chess.Logic exposing
-    ( ForcingWeight(..)
+    ( Accumulator(..)
+    , ForcingWeight(..)
+    , Game
     , Piece(..)
     , PieceType(..)
     , Square(..)
@@ -9,6 +11,7 @@ module Chess.Logic exposing
     , forcingMoves
     , init
     , isCheckmate
+    , makeMove
     )
 
 import Chess.Position as Position exposing (Position(..))
@@ -78,55 +81,215 @@ init squares turn =
 type ForcingWeight
     = CheckMate
     | Check
+    | Forced
+
+
+
+--| Check
+-- NOTE: This is an edge of a directed graph.
 
 
 type alias ForcingMove =
-    { squareTo : Position
+    { game : Game
+    , squareTo : Position
     , squareFrom : Position
     , value : ForcingWeight
+    , path : Path
     }
 
 
-forcingMoves : Game -> List (Tree ForcingMove)
+forcingMoves : Game -> List String
 forcingMoves game =
-    forcingMovesInner game [] 0
+    Tree.unfoldForest next (findForcingMoves game (Path []))
+        |> Tree.inner (Root game)
+        |> Tree.levelOrder visit (Accumulator [])
+        |> findForcingMovesPath
+
+
+findForcingMovesPath : Accumulator -> List String
+findForcingMovesPath (Accumulator nodes) =
+    List.map findForcingMovePath nodes
+
+
+findForcingMovePath : Node -> String
+findForcingMovePath node =
+    case node of
+        Root _ ->
+            "Root"
+
+        NotFound ->
+            "Not Found"
+
+        Node game forcingMove ->
+            String.join " > "
+                [ fMoveToString forcingMove
+                , pathToString forcingMove.path
+                ]
+
+
+fMoveToString : ForcingMove -> String
+fMoveToString forcingMove =
+    Position.toString forcingMove.squareFrom ++ "-" ++ Position.toString forcingMove.squareTo ++ " " ++ weightToString forcingMove.value
+
+
+weightToString : ForcingWeight -> String
+weightToString weight =
+    case weight of
+        CheckMate ->
+            "CheckMate"
+
+        Check ->
+            "Check"
+
+        Forced ->
+            "Forced"
+
+
+pathToString : Path -> String
+pathToString (Path path) =
+    if List.isEmpty path then
+        "Root"
+
+    else
+        String.join " > "
+            (List.map fMoveToString path)
 
 
 
---let
---    checkmates =
---        List.map (\mate -> Tree.leaf mate) <| findCheckmates game
---
---    checks =
---        List.map (\check -> Tree.leaf check) <| findChecks2 game
---in
---checkmates
---inner : label -> List (Tree label) -> Tree label
+-- TREE TRAVERSAL
 
 
-forcingMovesInner : Game -> List (Tree ForcingMove) -> Int -> List (Tree ForcingMove)
-forcingMovesInner game tree depth =
+type Accumulator
+    = Accumulator (List Node)
+
+
+visit : Node -> Tree.Forest Node -> Accumulator -> Accumulator
+visit node children (Accumulator nodes) =
+    case node of
+        NotFound ->
+            Accumulator nodes
+
+        _ ->
+            Accumulator <| node :: nodes
+
+
+
+-- TREE POPULATION
+
+
+type Node
+    = Node Game ForcingMove
+    | NotFound
+    | Root Game
+
+
+type Path
+    = Path (List ForcingMove)
+
+
+next : ForcingMove -> ( Node, List ForcingMove )
+next ({ value, squareFrom, squareTo, game, path } as forcingMove) =
+    if depth path > 3 then
+        ( NotFound, [] )
+
+    else
+        case value of
+            Check ->
+                let
+                    nextGame =
+                        makeMove (positionToSquareKey squareFrom) (positionToSquareKey squareTo) game
+
+                    forced =
+                        findMovesThatAvoidCheck nextGame (appendPath forcingMove path)
+                in
+                ( Node nextGame forcingMove, forced )
+
+            Forced ->
+                let
+                    nextGame =
+                        makeMove (positionToSquareKey squareFrom) (positionToSquareKey squareTo) game
+
+                    forcing =
+                        findForcingMoves nextGame (appendPath forcingMove path)
+                in
+                ( Node nextGame forcingMove, forcing )
+
+            CheckMate ->
+                ( Node (makeMove (positionToSquareKey squareFrom) (positionToSquareKey squareTo) game) forcingMove, [] )
+
+
+depth : Path -> Int
+depth (Path path) =
+    List.length path
+
+
+appendPath : ForcingMove -> Path -> Path
+appendPath forcingMove (Path path) =
+    Path <| forcingMove :: path
+
+
+findForcingMoves : Game -> Path -> List ForcingMove
+findForcingMoves game path =
     let
         checkmates =
-            List.map (\mate -> Tree.inner mate tree) <| findCheckmates game
+            findCheckmates game path
 
         checks =
-            (List.map (\check -> Tree.inner check tree) <| findPotentialChecks game)
-                |> Debug.log "checks"
+            findPotentialChecks game path
     in
-    []
+    checkmates ++ checks
 
 
-findCheckmates : Game -> List ForcingMove
-findCheckmates game =
-    List.concatMap (findCheckmatesForPosition game) Position.all
+
+-- AVOID CHECK
 
 
-findCheckmatesForPosition : Game -> Position -> List ForcingMove
-findCheckmatesForPosition game ((Position column row) as squareTo) =
+findMovesThatAvoidCheck : Game -> Path -> List ForcingMove
+findMovesThatAvoidCheck game path =
+    List.concatMap (findMovesThatAvoidCheckForPosition game path) Position.all
+
+
+findMovesThatAvoidCheckForPosition : Game -> Path -> Position -> List ForcingMove
+findMovesThatAvoidCheckForPosition game path ((Position column row) as squareTo) =
+    canMoveTo squareTo game
+        |> List.filter (\squareFrom -> avoidsCheck squareFrom squareTo game)
+        |> List.map (\squareFromThatAvoids -> ForcingMove game squareTo squareFromThatAvoids Forced path)
+
+
+avoidsCheck : Position -> Position -> Game -> Bool
+avoidsCheck squareFrom squareTo ({ occupiedSquares, turn } as game) =
+    let
+        occupiedAsList =
+            Dict.toList occupiedSquares
+
+        -- TODO: pass in monarchs so that we know we have them.
+        ( monarchLocation, monarch ) =
+            List.filter (sameTeam turn) occupiedAsList
+                |> List.filter isMonarch
+                |> List.head
+                |> Maybe.withDefault ( ( 1, 1 ), Piece Monarch turn )
+
+        monarchVectors =
+            possibleMonarchVectors monarchLocation
+
+        monarchIsAbleToEscape =
+            List.filter (\monarchMoveTo -> monarchCanMoveTo game monarchMoveTo occupiedSquares monarchLocation) monarchVectors
+                |> List.isEmpty
+                |> not
+    in
+    monarchIsAbleToEscape
+
+
+findCheckmates : Game -> Path -> List ForcingMove
+findCheckmates game path =
+    List.concatMap (findCheckmatesForPosition game path) Position.all
+
+
+findCheckmatesForPosition : Game -> Path -> Position -> List ForcingMove
+findCheckmatesForPosition game path ((Position column row) as squareTo) =
     canMoveTo squareTo game
         |> List.filter (\squareFrom -> leadsToCheckmate squareFrom squareTo game)
-        |> List.map (\squareFromThatIsCheckmate -> ForcingMove squareTo squareFromThatIsCheckmate CheckMate)
+        |> List.map (\squareFromThatIsCheckmate -> ForcingMove game squareTo squareFromThatIsCheckmate CheckMate path)
 
 
 leadsToCheckmate : Position -> Position -> Game -> Bool
@@ -135,16 +298,20 @@ leadsToCheckmate squareFrom squareTo game =
         |> isCheckmate
 
 
-findPotentialChecks : Game -> List ForcingMove
-findPotentialChecks game =
-    List.concatMap (findChecksForPosition game) Position.all
+
+-- CHECKS
 
 
-findChecksForPosition : Game -> Position -> List ForcingMove
-findChecksForPosition game ((Position column row) as squareTo) =
+findPotentialChecks : Game -> Path -> List ForcingMove
+findPotentialChecks game path =
+    List.concatMap (findChecksForPosition game path) Position.all
+
+
+findChecksForPosition : Game -> Path -> Position -> List ForcingMove
+findChecksForPosition game path ((Position column row) as squareTo) =
     canMoveTo squareTo game
         |> List.filter (\squareFrom -> leadsToCheck squareFrom squareTo game)
-        |> List.map (\squareFromThatIsCheck -> ForcingMove squareTo squareFromThatIsCheck Check)
+        |> List.map (\squareFromThatIsCheck -> ForcingMove game squareTo squareFromThatIsCheck Check path)
 
 
 leadsToCheck : Position -> Position -> Game -> Bool
@@ -155,7 +322,6 @@ leadsToCheck squareFrom squareTo game =
 
 
 
---|> List.map (\(Occupied squareFrom piece) -> ForcingMove squareTo squareFrom Check)
 -- CHECKMATE
 
 
