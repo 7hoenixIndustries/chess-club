@@ -128,6 +128,7 @@ jobs:
         run: npm run elm-test --prefix assets
 
       - name: Xref Graph Gen/Upload
+        if: github.ref != 'refs/heads/main'
         id: xref
         run: |
           mix xref graph --format dot
@@ -143,6 +144,7 @@ jobs:
           echo "_image_html=$_image_html" >> $GITHUB_ENV
 
       - name: Add Xref Graph to PR Comment
+        if: github.ref != 'refs/heads/main'
         uses: thollander/actions-comment-pull-request@master
         with:
           message: ${{ env._image_html }}
