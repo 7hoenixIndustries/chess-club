@@ -102,12 +102,12 @@ forcingMoves : Game -> List String
 forcingMoves game =
     Tree.unfoldForest next (findForcingMoves game (Path []))
         |> Tree.inner (Root game)
-        |> Tree.levelOrder visit (Accumulator [])
+        |> Tree.levelOrder visit (Accumulator [] 100)
         |> findForcingMovesPath
 
 
 findForcingMovesPath : Accumulator -> List String
-findForcingMovesPath (Accumulator nodes) =
+findForcingMovesPath (Accumulator nodes _) =
     List.map findForcingMovePath nodes
 
 
@@ -160,17 +160,22 @@ pathToString (Path path) =
 
 
 type Accumulator
-    = Accumulator (List Node)
+    = Accumulator (List Node) Int
 
 
 visit : Node -> Tree.Forest Node -> Accumulator -> Accumulator
-visit node children (Accumulator nodes) =
+visit node children ((Accumulator nodes best) as acc) =
     case node of
-        NotFound ->
-            Accumulator nodes
+        Node game forcingMove ->
+            case forcingMove.value of
+                CheckMate ->
+                    Accumulator (node :: nodes) best
+
+                _ ->
+                    acc
 
         _ ->
-            Accumulator <| node :: nodes
+            acc
 
 
 
@@ -189,7 +194,7 @@ type Path
 
 next : ForcingMove -> ( Node, List ForcingMove )
 next ({ value, squareFrom, squareTo, game, path } as forcingMove) =
-    if depth path > 3 then
+    if depth path > 5 then
         ( NotFound, [] )
 
     else
@@ -200,7 +205,7 @@ next ({ value, squareFrom, squareTo, game, path } as forcingMove) =
                         makeMove (positionToSquareKey squareFrom) (positionToSquareKey squareTo) game
 
                     forced =
-                        findMovesThatAvoidCheck nextGame (appendPath forcingMove path)
+                        filterOutComplexMoves <| findMovesThatAvoidCheck nextGame (appendPath forcingMove path)
                 in
                 ( Node nextGame forcingMove, forced )
 
@@ -216,6 +221,21 @@ next ({ value, squareFrom, squareTo, game, path } as forcingMove) =
 
             CheckMate ->
                 ( Node (makeMove (positionToSquareKey squareFrom) (positionToSquareKey squareTo) game) forcingMove, [] )
+
+
+
+-- NOTE: This is used to restrict the computation so that we are only analyzing positions that don't fan out.
+-- It is the same as when analyzing a game as a human (computations are only really feasible up to a few different options).
+-- And then go systematically through the options.
+
+
+filterOutComplexMoves : List ForcingMove -> List ForcingMove
+filterOutComplexMoves moves =
+    if List.length moves > 3 then
+        []
+
+    else
+        moves
 
 
 depth : Path -> Int

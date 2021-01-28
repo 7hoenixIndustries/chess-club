@@ -13,6 +13,7 @@ module Chess.Game exposing
     , view
     )
 
+import Chess.Logic as Logic
 import Dict exposing (Dict)
 import Html exposing (Attribute, Html, div, fieldset, input, label, text)
 import Html.Attributes exposing (checked, class, classList, name, type_)
@@ -33,6 +34,9 @@ type alias Model =
     { game : Game
     , considering : Considering
     , playerColor : Color
+
+    -- NOTE: It's only a maybe because forcingMoves does not yet support all of the pieceTypes; missing: [Pawn, Knight]
+    , forcingMoves : Maybe (List String)
     }
 
 
@@ -77,9 +81,79 @@ blankBoard =
     Game Dict.empty [] (Turn Black)
 
 
-init : List Move -> String -> Model
+init : List Move -> String -> ( Model, Cmd Msg )
 init availableMoves currentState =
-    Model (makeGame availableMoves currentState) NotConsidering Black
+    ( Model (makeGame availableMoves currentState) NotConsidering Black Nothing, Task.perform (\_ -> FindForcingMoves) (Task.succeed ()) )
+
+
+
+--( Model game NotConsidering Black foo, Cmd.none )
+
+
+toLogicGame : Game -> Maybe Logic.Game
+toLogicGame (Game pieces _ (Turn team)) =
+    let
+        ps =
+            Dict.toList pieces
+
+        bad =
+            List.map convertToLogicPieces ps
+
+        final =
+            List.foldl appendIfThere (Just []) bad
+
+        logicTeam =
+            convertToLogicTeam team
+    in
+    Maybe.map Dict.fromList final
+        |> Maybe.map (\pss -> Logic.Game pss logicTeam)
+
+
+appendIfThere : Maybe ( ( Int, Int ), Logic.Piece ) -> Maybe (List ( ( Int, Int ), Logic.Piece )) -> Maybe (List ( ( Int, Int ), Logic.Piece ))
+appendIfThere possiblePiece possibleAll =
+    case ( possiblePiece, possibleAll ) of
+        ( Just p, Just a ) ->
+            Just (p :: a)
+
+        -- If any pieces are missing then just throw it all out.
+        _ ->
+            Nothing
+
+
+convertToLogicPieces : ( Position, Piece ) -> Maybe ( ( Int, Int ), Logic.Piece )
+convertToLogicPieces ( ( column, row ), Piece turn pieceType ) =
+    let
+        team =
+            convertToLogicTeam turn
+    in
+    case pieceType of
+        Pawn ->
+            Nothing
+
+        Knight ->
+            Nothing
+
+        Advisor ->
+            Just ( ( column, row ), Logic.Piece Logic.Advisor team )
+
+        Rook ->
+            Just ( ( column, row ), Logic.Piece Logic.Rook team )
+
+        Bishop ->
+            Just ( ( column, row ), Logic.Piece Logic.Bishop team )
+
+        Monarch ->
+            Just ( ( column, row ), Logic.Piece Logic.Monarch team )
+
+
+convertToLogicTeam : Color -> Logic.Team
+convertToLogicTeam color =
+    case color of
+        White ->
+            Logic.White
+
+        Black ->
+            Logic.Black
 
 
 makeGame : List Move -> String -> Game
@@ -93,6 +167,7 @@ makeGame availableMoves currentState =
 
 type Msg
     = ChangeTeam Color
+    | FindForcingMoves
     | StartConsidering Position
     | StartHovering Position
     | StopHovering
@@ -114,6 +189,16 @@ update callbacks msg model =
     case msg of
         ChangeTeam color ->
             ( { model | playerColor = color }, Cmd.none )
+
+        FindForcingMoves ->
+            let
+                maybeLogicGame =
+                    toLogicGame model.game
+
+                foo =
+                    Maybe.map Logic.forcingMoves maybeLogicGame
+            in
+            ( { model | forcingMoves = foo }, Cmd.none )
 
         StartConsidering position ->
             ( { model | considering = ConsideringMovingTo position }, Cmd.none )
@@ -144,12 +229,24 @@ update callbacks msg model =
 
 
 view : Model -> Html Msg
-view { game, considering, playerColor } =
+view { game, considering, playerColor, forcingMoves } =
     div [ class "container mx-auto h-96 w-96" ]
         [ viewTurn game playerColor
         , viewBoard game considering playerColor
         , viewSettings playerColor
+        , viewForcingMoves forcingMoves
         ]
+
+
+viewForcingMoves : Maybe (List String) -> Html Msg
+viewForcingMoves forcingMoves =
+    case forcingMoves of
+        Nothing ->
+            div [] [ text "Unsupported pieces found (Knight or Pawn). Can't see forcing moves just yet." ]
+
+        Just moves ->
+            div []
+                (List.map (\m -> text m) moves)
 
 
 viewSettings : Color -> Html Msg

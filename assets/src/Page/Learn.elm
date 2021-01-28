@@ -122,11 +122,18 @@ update backend msg model =
 
                 Ok scenario ->
                     -- TODO: chessModel is directly dependent on scenario. . . are we able to combine these somehow?
+                    let
+                        ( chessModel, chessMsgs ) =
+                            Chess.init scenario.availableMoves scenario.currentState
+                    in
                     ( { model
                         | scenario = Just scenario
-                        , chessModel = Just <| Chess.init scenario.availableMoves scenario.currentState
+                        , chessModel = Just chessModel
                       }
-                    , Js.createSubscriptions (subscribeToMoves scenario.id |> Graphql.Document.serializeSubscription)
+                    , Cmd.batch
+                        [ Js.createSubscriptions (subscribeToMoves scenario.id |> Graphql.Document.serializeSubscription)
+                        , Cmd.map ChessMsg chessMsgs
+                        ]
                     )
 
         MakeMove move ->
