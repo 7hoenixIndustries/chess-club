@@ -1,7 +1,7 @@
-module Chess.LogicTest exposing (all)
+module Chess.SearchTest exposing (all)
 
-import Chess.Logic as Chess exposing (Piece, PieceType(..), Square)
 import Chess.Position as Position exposing (Position(..))
+import Chess.Search as Chess exposing (Piece, PieceType(..), Square)
 import Expect exposing (..)
 import Fuzz exposing (Fuzzer)
 import Graph.Tree as Tree

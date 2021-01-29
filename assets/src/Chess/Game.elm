@@ -13,7 +13,7 @@ module Chess.Game exposing
     , view
     )
 
-import Chess.Logic as Logic
+import Chess.Search as Search
 import Dict exposing (Dict)
 import Html exposing (Attribute, Html, div, fieldset, input, label, text)
 import Html.Attributes exposing (checked, class, classList, name, type_)
@@ -21,6 +21,7 @@ import Html.Events exposing (onClick, onInput, onMouseLeave, onMouseOver)
 import Json.Decode as D
 import Json.Encode as E
 import Page.Learn.Scenario exposing (Move)
+import Process
 import Svg exposing (circle, g, svg)
 import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, width)
 import Task
@@ -83,33 +84,29 @@ blankBoard =
 
 init : List Move -> String -> ( Model, Cmd Msg )
 init availableMoves currentState =
-    ( Model (makeGame availableMoves currentState) NotConsidering Black Nothing, Task.perform (\_ -> FindForcingMoves) (Task.succeed ()) )
+    ( Model (makeGame availableMoves currentState) NotConsidering Black Nothing, Task.perform (\_ -> FindForcingMoves) (Process.sleep 0) )
 
 
-
---( Model game NotConsidering Black foo, Cmd.none )
-
-
-toLogicGame : Game -> Maybe Logic.Game
-toLogicGame (Game pieces _ (Turn team)) =
+toSearchGame : Game -> Maybe Search.Game
+toSearchGame (Game pieces _ (Turn team)) =
     let
         ps =
             Dict.toList pieces
 
         bad =
-            List.map convertToLogicPieces ps
+            List.map convertToSearchPieces ps
 
         final =
             List.foldl appendIfThere (Just []) bad
 
-        logicTeam =
-            convertToLogicTeam team
+        searchTeam =
+            convertToSearchTeam team
     in
     Maybe.map Dict.fromList final
-        |> Maybe.map (\pss -> Logic.Game pss logicTeam)
+        |> Maybe.map (\pss -> Search.Game pss searchTeam)
 
 
-appendIfThere : Maybe ( ( Int, Int ), Logic.Piece ) -> Maybe (List ( ( Int, Int ), Logic.Piece )) -> Maybe (List ( ( Int, Int ), Logic.Piece ))
+appendIfThere : Maybe ( ( Int, Int ), Search.Piece ) -> Maybe (List ( ( Int, Int ), Search.Piece )) -> Maybe (List ( ( Int, Int ), Search.Piece ))
 appendIfThere possiblePiece possibleAll =
     case ( possiblePiece, possibleAll ) of
         ( Just p, Just a ) ->
@@ -120,11 +117,11 @@ appendIfThere possiblePiece possibleAll =
             Nothing
 
 
-convertToLogicPieces : ( Position, Piece ) -> Maybe ( ( Int, Int ), Logic.Piece )
-convertToLogicPieces ( ( column, row ), Piece turn pieceType ) =
+convertToSearchPieces : ( Position, Piece ) -> Maybe ( ( Int, Int ), Search.Piece )
+convertToSearchPieces ( ( column, row ), Piece turn pieceType ) =
     let
         team =
-            convertToLogicTeam turn
+            convertToSearchTeam turn
     in
     case pieceType of
         Pawn ->
@@ -134,26 +131,26 @@ convertToLogicPieces ( ( column, row ), Piece turn pieceType ) =
             Nothing
 
         Advisor ->
-            Just ( ( column, row ), Logic.Piece Logic.Advisor team )
+            Just ( ( column, row ), Search.Piece Search.Advisor team )
 
         Rook ->
-            Just ( ( column, row ), Logic.Piece Logic.Rook team )
+            Just ( ( column, row ), Search.Piece Search.Rook team )
 
         Bishop ->
-            Just ( ( column, row ), Logic.Piece Logic.Bishop team )
+            Just ( ( column, row ), Search.Piece Search.Bishop team )
 
         Monarch ->
-            Just ( ( column, row ), Logic.Piece Logic.Monarch team )
+            Just ( ( column, row ), Search.Piece Search.Monarch team )
 
 
-convertToLogicTeam : Color -> Logic.Team
-convertToLogicTeam color =
+convertToSearchTeam : Color -> Search.Team
+convertToSearchTeam color =
     case color of
         White ->
-            Logic.White
+            Search.White
 
         Black ->
-            Logic.Black
+            Search.Black
 
 
 makeGame : List Move -> String -> Game
@@ -192,11 +189,11 @@ update callbacks msg model =
 
         FindForcingMoves ->
             let
-                maybeLogicGame =
-                    toLogicGame model.game
+                maybeSearchGame =
+                    toSearchGame model.game
 
                 foo =
-                    Maybe.map Logic.forcingMoves maybeLogicGame
+                    Maybe.map Search.forcingMoves maybeSearchGame
             in
             ( { model | forcingMoves = foo }, Cmd.none )
 

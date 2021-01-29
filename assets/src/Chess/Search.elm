@@ -1,4 +1,4 @@
-module Chess.Logic exposing
+module Chess.Search exposing
     ( Accumulator(..)
     , ForcingWeight(..)
     , Game
