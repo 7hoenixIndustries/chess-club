@@ -10,6 +10,7 @@ module Page.Learn exposing
 import Api.Scalar exposing (Id)
 import Backend exposing (Backend)
 import Chess.Game as Chess
+import Chess.Search as Search
 import Graphql.Document
 import Graphql.Http
 import Html exposing (..)
@@ -28,12 +29,15 @@ import Skeleton
 
 
 type alias Model =
-    { chessModel : Maybe Chess.Model
-    , session : Session.Data
+    { session : Session.Data
     , scenarios : Scenarios
     , subscriptionStatus : SubscriptionStatus
-    , scenario : Maybe Scenario.Scenario
+    , scenarioStuff : Maybe ScenarioStuff
     }
+
+
+type alias ScenarioStuff =
+    { scenario : Scenario.Scenario, chessModel : Chess.Model, searchModel : Search.Model }
 
 
 type SubscriptionStatus
@@ -52,12 +56,12 @@ init : Backend -> Session.Data -> ( Model, Cmd Msg )
 init backend session =
     case Session.getScenarios session of
         Just entries ->
-            ( Model Nothing session (Success entries) NotConnected Nothing
+            ( Model session (Success entries) NotConnected Nothing
             , Cmd.none
             )
 
         Nothing ->
-            ( Model Nothing session Loading NotConnected Nothing
+            ( Model session Loading NotConnected Nothing
             , Cmd.batch
                 [ Scenario.getScenarios backend GotScenarios
                 ]
@@ -77,6 +81,7 @@ type Msg
     | MakeMove Move
     | NewSubscriptionStatus SubscriptionStatus ()
     | ScenarioCreated (Result (Graphql.Http.Error Id) Id)
+    | SearchMsg Search.Msg
     | SentMove (Result (Graphql.Http.Error ()) ())
     | SubscriptionDataReceived Json.Decode.Value
 
@@ -85,12 +90,12 @@ update : Backend -> Msg -> Model -> ( Model, Cmd Msg )
 update backend msg model =
     case msg of
         ChessMsg chessMsg ->
-            case model.chessModel of
+            case model.scenarioStuff of
                 Nothing ->
                     ( model, Cmd.none )
 
-                Just chessModel ->
-                    stepChess model (Chess.update (Chess.Callbacks MakeMove) chessMsg chessModel)
+                Just scenarioStuff ->
+                    stepChess model (Chess.update (Chess.Callbacks MakeMove) chessMsg scenarioStuff.chessModel)
 
         CreateScenario ->
             ( model, Scenario.createScenario backend ScenarioCreated )
@@ -127,8 +132,7 @@ update backend msg model =
                             Chess.init scenario.availableMoves scenario.currentState
                     in
                     ( { model
-                        | scenario = Just scenario
-                        , chessModel = Just chessModel
+                        | scenarioStuff = Just <| ScenarioStuff scenario chessModel (Search.init chessModel.game)
                       }
                     , Cmd.batch
                         [ Js.createSubscriptions (subscribeToMoves scenario.id |> Graphql.Document.serializeSubscription)
@@ -137,10 +141,11 @@ update backend msg model =
                     )
 
         MakeMove move ->
-            case model.scenario of
-                Just scenario ->
+            case model.scenarioStuff of
+                Just scenarioStuff ->
+                    -- Hey there demeter. . . what's up with your law?
                     ( model
-                    , Scenario.makeMove backend scenario.id move SentMove
+                    , Scenario.makeMove backend scenarioStuff.scenario.id move SentMove
                     )
 
                 Nothing ->
@@ -167,17 +172,31 @@ update backend msg model =
                             , Cmd.none
                             )
 
+        SearchMsg searchMsg ->
+            case model.scenarioStuff of
+                Nothing ->
+                    ( model, Cmd.none )
+
+                Just scenarioStuff ->
+                    stepSearch model (Search.update searchMsg scenarioStuff.searchModel)
+
         SentMove _ ->
             ( model, Cmd.none )
 
         SubscriptionDataReceived newData ->
-            case model.scenario of
-                Just scenario ->
-                    case Json.Decode.decodeValue (subscribeToMoves scenario.id |> Graphql.Document.decoder) newData of
+            case model.scenarioStuff of
+                Just scenarioStuff ->
+                    case Json.Decode.decodeValue (subscribeToMoves scenarioStuff.scenario.id |> Graphql.Document.decoder) newData of
                         Ok s ->
+                            let
+                                chessModelToUpdate =
+                                    scenarioStuff.chessModel
+
+                                game =
+                                    Chess.makeGame s.availableMoves s.currentState
+                            in
                             ( { model
-                                | scenario = Just s
-                                , chessModel = Maybe.map (\chessModel -> { chessModel | game = Chess.makeGame s.availableMoves s.currentState }) model.chessModel
+                                | scenarioStuff = Just <| ScenarioStuff s { chessModelToUpdate | game = game } scenarioStuff.searchModel
                               }
                             , Cmd.none
                             )
@@ -191,7 +210,16 @@ update backend msg model =
 
 stepChess : Model -> ( Chess.Model, Cmd Msg ) -> ( Model, Cmd Msg )
 stepChess model ( chessModel, chessCmds ) =
-    ( { model | chessModel = Just chessModel }, chessCmds )
+    ( { model | scenarioStuff = Maybe.map (\scenarioStuff -> { scenarioStuff | chessModel = chessModel }) model.scenarioStuff }
+    , chessCmds
+    )
+
+
+stepSearch : Model -> ( Search.Model, Cmd Search.Msg ) -> ( Model, Cmd Msg )
+stepSearch model ( searchModel, searchCmds ) =
+    ( { model | scenarioStuff = Maybe.map (\scenarioStuff -> { scenarioStuff | searchModel = searchModel }) model.scenarioStuff }
+    , Cmd.map SearchMsg searchCmds
+    )
 
 
 
@@ -205,7 +233,7 @@ view model =
     , warning = Skeleton.NoProblems
     , attrs = [ class "container mx-auto px-4" ]
     , children =
-        [ lazy3 viewLearn model.scenario model.chessModel model.subscriptionStatus
+        [ lazy2 viewLearn model.scenarioStuff model.subscriptionStatus
         , lazy viewScenarios model.scenarios
         ]
     }
@@ -265,21 +293,15 @@ viewSelectScenario { id } =
 -- VIEW LEARN
 
 
-viewLearn : Maybe Scenario.Scenario -> Maybe Chess.Model -> SubscriptionStatus -> Html Msg
-viewLearn scenario chessModel subscriptionStatus =
+viewLearn : Maybe ScenarioStuff -> SubscriptionStatus -> Html Msg
+viewLearn scenarioStuff subscriptionStatus =
     div [ class "p-6 max-w-sm mx-auto bg-white rounded-xl shadow-md flex items-center space-x-4" ]
-        [ case ( scenario, chessModel ) of
-            ( Just s, Just c ) ->
-                viewScenario s c subscriptionStatus
+        [ case scenarioStuff of
+            Just stuff ->
+                viewScenario stuff subscriptionStatus
 
-            ( Nothing, Just _ ) ->
+            Nothing ->
                 div [] [ text "Scenario not loaded." ]
-
-            ( Just _, Nothing ) ->
-                div [] [ text "Chess not loaded." ]
-
-            ( Nothing, Nothing ) ->
-                div [] []
         ]
 
 
@@ -287,11 +309,12 @@ viewLearn scenario chessModel subscriptionStatus =
 -- VIEW SCENARIO
 
 
-viewScenario : Scenario.Scenario -> Chess.Model -> SubscriptionStatus -> Html Msg
-viewScenario scenario chessModel subscriptionStatus =
+viewScenario : ScenarioStuff -> SubscriptionStatus -> Html Msg
+viewScenario scenarioStuff subscriptionStatus =
     div [ class "container flex flex-col mx-auto px-4" ]
         [ viewConnection subscriptionStatus
-        , Html.map ChessMsg (Chess.view chessModel)
+        , Html.map SearchMsg (Search.view scenarioStuff.searchModel)
+        , Html.map ChessMsg (Chess.view scenarioStuff.chessModel)
         ]
 
 

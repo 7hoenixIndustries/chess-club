@@ -1,19 +1,32 @@
 module Chess.Game exposing
     ( Callbacks
-    , Color
+    , Color(..)
+    , Game(..)
     , Model
     , Msg
-    , Piece
-    , PieceType
+    , Piece(..)
+    , PieceType(..)
+    , Square(..)
+    , Turn(..)
     , blankBoard
+    , canMoveTo
+    , findChecks
     , fromFen
     , init
+    , initWithExistingState
+    , isCheckmate
+    , isMonarch
     , makeGame
+    , makeMove
+    , monarchCanMoveTo
+    , opponentTurn
+    , possibleMonarchVectors
+    , sameTeam
     , update
     , view
     )
 
-import Chess.Search as Search
+import Chess.Board exposing (Position(..))
 import Dict exposing (Dict)
 import Html exposing (Attribute, Html, div, fieldset, input, label, text)
 import Html.Attributes exposing (checked, class, classList, name, type_)
@@ -22,6 +35,7 @@ import Json.Decode as D
 import Json.Encode as E
 import Page.Learn.Scenario exposing (Move)
 import Process
+import Set exposing (Set)
 import Svg exposing (circle, g, svg)
 import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, width)
 import Task
@@ -35,14 +49,15 @@ type alias Model =
     { game : Game
     , considering : Considering
     , playerColor : Color
-
-    -- NOTE: It's only a maybe because forcingMoves does not yet support all of the pieceTypes; missing: [Pawn, Knight]
-    , forcingMoves : Maybe (List String)
     }
 
 
 type Game
     = Game (Dict Position Piece) (List Move) Turn
+
+
+type Square
+    = Occupied Position Piece
 
 
 type alias Position =
@@ -82,75 +97,35 @@ blankBoard =
     Game Dict.empty [] (Turn Black)
 
 
+
+{-
+   This is for making a game state with state from the backend.
+-}
+
+
 init : List Move -> String -> ( Model, Cmd Msg )
 init availableMoves currentState =
-    ( Model (makeGame availableMoves currentState) NotConsidering Black Nothing, Task.perform (\_ -> FindForcingMoves) (Process.sleep 0) )
+    ( Model (makeGame availableMoves currentState) NotConsidering Black, Cmd.none )
 
 
-toSearchGame : Game -> Maybe Search.Game
-toSearchGame (Game pieces _ (Turn team)) =
-    let
-        ps =
-            Dict.toList pieces
 
-        bad =
-            List.map convertToSearchPieces ps
+--( Model (makeGame availableMoves currentState) NotConsidering Black Nothing, Task.perform (\_ -> FindForcingMoves) (Process.sleep 0) )
+{-
+   This is needed for Search.
 
-        final =
-            List.foldl appendIfThere (Just []) bad
+   It won't be playable by an actual human (as the availableMoves is set to []).
 
-        searchTeam =
-            convertToSearchTeam team
-    in
-    Maybe.map Dict.fromList final
-        |> Maybe.map (\pss -> Search.Game pss searchTeam)
+   -> It would be nice if this entry point was unified. . . probably.
+-}
 
 
-appendIfThere : Maybe ( ( Int, Int ), Search.Piece ) -> Maybe (List ( ( Int, Int ), Search.Piece )) -> Maybe (List ( ( Int, Int ), Search.Piece ))
-appendIfThere possiblePiece possibleAll =
-    case ( possiblePiece, possibleAll ) of
-        ( Just p, Just a ) ->
-            Just (p :: a)
-
-        -- If any pieces are missing then just throw it all out.
-        _ ->
-            Nothing
+initWithExistingState : List Square -> Turn -> Game
+initWithExistingState squares turn =
+    Game (List.foldl putPieceOnBoard Dict.empty squares) [] turn
 
 
-convertToSearchPieces : ( Position, Piece ) -> Maybe ( ( Int, Int ), Search.Piece )
-convertToSearchPieces ( ( column, row ), Piece turn pieceType ) =
-    let
-        team =
-            convertToSearchTeam turn
-    in
-    case pieceType of
-        Pawn ->
-            Nothing
-
-        Knight ->
-            Nothing
-
-        Advisor ->
-            Just ( ( column, row ), Search.Piece Search.Advisor team )
-
-        Rook ->
-            Just ( ( column, row ), Search.Piece Search.Rook team )
-
-        Bishop ->
-            Just ( ( column, row ), Search.Piece Search.Bishop team )
-
-        Monarch ->
-            Just ( ( column, row ), Search.Piece Search.Monarch team )
-
-
-convertToSearchTeam : Color -> Search.Team
-convertToSearchTeam color =
-    case color of
-        White ->
-            Search.White
-
-        Black ->
-            Search.Black
+putPieceOnBoard (Occupied position piece) b =
+    Dict.insert position piece b
 
 
 makeGame : List Move -> String -> Game
@@ -164,7 +139,6 @@ makeGame availableMoves currentState =
 
 type Msg
     = ChangeTeam Color
-    | FindForcingMoves
     | StartConsidering Position
     | StartHovering Position
     | StopHovering
@@ -187,16 +161,15 @@ update callbacks msg model =
         ChangeTeam color ->
             ( { model | playerColor = color }, Cmd.none )
 
-        FindForcingMoves ->
-            let
-                maybeSearchGame =
-                    toSearchGame model.game
-
-                foo =
-                    Maybe.map Search.forcingMoves maybeSearchGame
-            in
-            ( { model | forcingMoves = foo }, Cmd.none )
-
+        --FindForcingMoves ->
+        --    let
+        --        maybeSearchGame =
+        --            toSearchGame model.game
+        --
+        --        foo =
+        --            Maybe.map Search.forcingMoves maybeSearchGame
+        --    in
+        --    ( { model | forcingMoves = foo }, Cmd.none )
         StartConsidering position ->
             ( { model | considering = ConsideringMovingTo position }, Cmd.none )
 
@@ -226,24 +199,26 @@ update callbacks msg model =
 
 
 view : Model -> Html Msg
-view { game, considering, playerColor, forcingMoves } =
+view { game, considering, playerColor } =
     div [ class "container mx-auto h-96 w-96" ]
         [ viewTurn game playerColor
         , viewBoard game considering playerColor
         , viewSettings playerColor
-        , viewForcingMoves forcingMoves
+
+        --, viewForcingMoves forcingMoves
         ]
 
 
-viewForcingMoves : Maybe (List String) -> Html Msg
-viewForcingMoves forcingMoves =
-    case forcingMoves of
-        Nothing ->
-            div [] [ text "Unsupported pieces found (Knight or Pawn). Can't see forcing moves just yet." ]
 
-        Just moves ->
-            div []
-                (List.map (\m -> text m) moves)
+--viewForcingMoves : Maybe (List String) -> Html Msg
+--viewForcingMoves forcingMoves =
+--    case forcingMoves of
+--        Nothing ->
+--            div [] [ text "Unsupported pieces found (Knight or Pawn). Can't see forcing moves just yet." ]
+--
+--        Just moves ->
+--            div []
+--                (List.map (\m -> text m) moves)
 
 
 viewSettings : Color -> Html Msg
@@ -461,6 +436,433 @@ turnToColor (Turn color) =
 movesToPosition : Position -> Position -> List Move -> List Move
 movesToPosition squareTo squareFrom =
     List.filter (\move -> move.squareFrom == toAlgebraic squareFrom && move.squareTo == toAlgebraic squareTo)
+
+
+
+-- LOGIC
+-- CHECKMATE
+
+
+isCheckmate : Game -> Bool
+isCheckmate ((Game occupiedSquares _ ((Turn team) as turn)) as game) =
+    case findChecks game of
+        [] ->
+            False
+
+        checks ->
+            let
+                occupiedAsList =
+                    Dict.toList occupiedSquares
+
+                -- TODO: pass in monarchs so that we know we have them.
+                ( monarchLocation, monarch ) =
+                    List.filter (sameTeam turn) occupiedAsList
+                        |> List.filter isMonarch
+                        |> List.head
+                        |> Maybe.withDefault ( ( 1, 1 ), Piece team Monarch )
+
+                monarchVectors =
+                    possibleMonarchVectors monarchLocation
+
+                monarchIsAbleToEscape =
+                    List.filter (\monarchMoveTo -> monarchCanMoveTo game monarchMoveTo occupiedSquares monarchLocation team) monarchVectors
+                        |> List.isEmpty
+                        |> not
+            in
+            monarchIsAbleToEscape
+                || checksAreBlockable monarchLocation game checks
+                || checksAreCapturable game checks
+                |> not
+
+
+
+-- TODO: type Checks = SingleCheck | DoubleCheck?
+
+
+checksAreCapturable : Game -> List Square -> Bool
+checksAreCapturable game checks =
+    case checks of
+        check :: [] ->
+            checkIsCapturable game check
+
+        checkA :: checkB :: _ ->
+            -- Cannot escape double check by capturing!
+            False
+
+        _ ->
+            -- No checks means no problems.
+            True
+
+
+checkIsCapturable : Game -> Square -> Bool
+checkIsCapturable game (Occupied position piece) =
+    canMoveTo position game
+        |> List.isEmpty
+        |> not
+
+
+checksAreBlockable : ( Int, Int ) -> Game -> List Square -> Bool
+checksAreBlockable monarchSquare game checks =
+    case checks of
+        -- NOTE: in Chess the maximum number of checks is 2.
+        -- In Chinese Xiang Xi it is possible to have 3 or even 4 checks.
+        check :: remainingChecks ->
+            List.map (checkBlockable monarchSquare game) remainingChecks
+                -- NOTE: This is certainly more complex than it needs to be. Future you, I owe you a beer.
+                |> List.foldl Set.intersect (checkBlockable monarchSquare game check)
+                |> Set.isEmpty
+                |> not
+
+        _ ->
+            -- No checks means no problems.
+            True
+
+
+checkBlockable : ( Int, Int ) -> Game -> Square -> Set ( Int, Int )
+checkBlockable ( monarchColumn, monarchRow ) ((Game occupiedSquares _ turn) as game) (Occupied ( checkingColumn, checkingRow ) _) =
+    pieceMovementToPath ( monarchColumn, monarchRow ) occupiedSquares ( checkingColumn, checkingRow ) turn
+        |> List.map (\( routeSquareColumn, routeSquareRow ) -> canMoveTo ( routeSquareColumn, routeSquareRow ) game)
+        --|> List.map (List.map (\(Position c r) -> ( c, r )))
+        |> List.map Set.fromList
+        |> List.foldl Set.union Set.empty
+
+
+possibleMonarchVectors : ( Int, Int ) -> List Position
+possibleMonarchVectors ( px, py ) =
+    List.map (\( dx, dy ) -> ( dx + px, dy + py )) (horizontalMovement ++ diagonalMovement)
+        |> List.filter (\( newColumn, newRow ) -> newColumn >= 1 && newColumn <= 8 && newRow >= 1 && newRow <= 8)
+
+
+
+--|> List.map (\( a, b ) -> Position a b)
+-- CHECK
+
+
+findChecks : Game -> List Square
+findChecks ((Game occupiedSquares passthrough ((Turn team) as turn)) as game) =
+    let
+        occupiedAsList =
+            Dict.toList occupiedSquares
+
+        ( monarchLocation, monarch ) =
+            List.filter (sameTeam turn) occupiedAsList
+                |> List.filter isMonarch
+                |> List.head
+                |> Maybe.withDefault ( ( 1, 1 ), Piece team Monarch )
+
+        enemyTeam =
+            List.filter (opponentTeam turn) occupiedAsList
+
+        fromTuple ( a, b ) fn =
+            fn a b
+    in
+    List.filter (\( pieceLocation, p ) -> pieceCanMoveTo (Game occupiedSquares passthrough (opponentTurn turn)) monarchLocation occupiedSquares pieceLocation) enemyTeam
+        |> List.map (\( pos, piece ) -> Occupied pos piece)
+
+
+opponentTurn : Turn -> Turn
+opponentTurn (Turn turn) =
+    case turn of
+        Black ->
+            Turn White
+
+        White ->
+            Turn Black
+
+
+isMonarch : ( a, Piece ) -> Bool
+isMonarch ( _, Piece _ pieceType ) =
+    case pieceType of
+        Monarch ->
+            True
+
+        _ ->
+            False
+
+
+sameTeam : Turn -> ( a, Piece ) -> Bool
+sameTeam (Turn turn) ( _, Piece pieceTeam _ ) =
+    pieceTeam == turn
+
+
+opponentTeam : Turn -> ( a, Piece ) -> Bool
+opponentTeam (Turn turn) ( _, Piece pieceTeam _ ) =
+    pieceTeam /= turn
+
+
+
+-- BOARD
+
+
+makeMove : ( Int, Int ) -> ( Int, Int ) -> Game -> Game
+makeMove squareFrom squareTo ((Game occupiedSquares possibleMoves ((Turn team) as turn)) as game) =
+    case Dict.get squareFrom occupiedSquares of
+        Nothing ->
+            game
+
+        Just piece ->
+            Dict.remove squareFrom occupiedSquares
+                |> Dict.insert squareTo piece
+                |> (\updatedPieces -> Game updatedPieces possibleMoves (opponentTurn turn))
+
+
+
+-- MOVEMENT
+
+
+pieceMovementToPath : Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Turn -> List ( Int, Int )
+pieceMovementToPath moveTo occupiedSquares occupied turn =
+    case Dict.get occupied occupiedSquares of
+        Nothing ->
+            []
+
+        Just (Piece _ Monarch) ->
+            []
+
+        -- TODO: ensure that these team's match the current turn being sought.
+        Just (Piece team Advisor) ->
+            findPath moveTo occupiedSquares occupied turn [] (horizontalMovement ++ diagonalMovement)
+
+        Just (Piece team Bishop) ->
+            findPath moveTo occupiedSquares occupied turn [] diagonalMovement
+
+        Just (Piece team Rook) ->
+            findPath moveTo occupiedSquares occupied turn [] horizontalMovement
+
+        Just (Piece team Knight) ->
+            -- TODO: implement me.
+            []
+
+        Just (Piece team Pawn) ->
+            -- TODO: implement me.
+            []
+
+
+pieceCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Bool
+pieceCanMoveTo game moveTo occupiedSquares occupied =
+    -- type MoveError = NoPieceOnSquare | OpponentsPiece | ResultsInCheck
+    case Dict.get occupied occupiedSquares of
+        Nothing ->
+            False
+
+        Just piece ->
+            case piece of
+                Piece team Monarch ->
+                    monarchCanMoveTo game moveTo occupiedSquares occupied team
+
+                Piece team Advisor ->
+                    canMoveToRepeating game moveTo occupiedSquares occupied team (horizontalMovement ++ diagonalMovement)
+
+                Piece team Bishop ->
+                    canMoveToRepeating game moveTo occupiedSquares occupied team diagonalMovement
+
+                Piece team Rook ->
+                    canMoveToRepeating game moveTo occupiedSquares occupied team horizontalMovement
+
+                Piece team Knight ->
+                    -- TODO implement me
+                    False
+
+                Piece team Pawn ->
+                    -- TODO implement me
+                    False
+
+
+doesNotLeadToCheck : ( Int, Int ) -> ( Int, Int ) -> Game -> Bool
+doesNotLeadToCheck squareFrom squareTo ((Game _ _ turn) as game) =
+    makeMove squareFrom squareTo game
+        |> (\(Game pieces moves _) ->
+                Game pieces moves turn
+                    |> findChecks
+                    |> List.isEmpty
+           )
+
+
+canMoveTo : Position -> Game -> List Position
+canMoveTo moveTo ((Game occupiedSquares _ _) as game) =
+    let
+        allOccupied =
+            Dict.keys occupiedSquares
+    in
+    List.filter (pieceCanMoveTo game moveTo occupiedSquares) allOccupied
+
+
+
+--|> List.map (\( x, y ) -> Position x y)
+
+
+monarchCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Color -> Bool
+monarchCanMoveTo game (( squareToColumn, squareToRow ) as moveTo) occupiedSquares occupied team =
+    -- TODO: restrict monarch movenment by color
+    List.any (\vector -> checkMoveInDirection vector moveTo occupiedSquares occupied)
+        (horizontalMovement ++ diagonalMovement)
+        && doesNotLeadToCheck occupied ( squareToColumn, squareToRow ) game
+
+
+canMoveToRepeating : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Color -> List ( Int, Int ) -> Bool
+canMoveToRepeating ((Game _ _ (Turn turn)) as game) (( squareToColumn, squareToRow ) as moveTo) occupiedSquares occupied team vectors =
+    turn
+        == team
+        && List.any (\vector -> checkMoveInDirectionRepeating vector moveTo occupiedSquares occupied (Turn turn)) vectors
+        && doesNotLeadToCheck occupied ( squareToColumn, squareToRow ) game
+
+
+findPath : Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Turn -> List ( Int, Int ) -> List ( Int, Int ) -> List ( Int, Int )
+findPath moveTo occupiedSquares occupied turn currentPath vectors =
+    let
+        final =
+            List.map (\vector -> findPathRepeating vector moveTo occupiedSquares occupied turn currentPath) vectors
+
+        removeEmpties =
+            List.filter (\l -> not (List.isEmpty l)) final
+    in
+    case removeEmpties of
+        [] ->
+            []
+
+        p :: [] ->
+            p
+
+        _ ->
+            -- You should never be able to have two paths to the same square.
+            []
+
+
+findPathRepeating : ( Int, Int ) -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Turn -> List ( Int, Int ) -> List ( Int, Int )
+findPathRepeating ( columnDelta, rowDeltay ) ( column, row ) occupiedSquares ( currentColumn, currentRow ) turn currentPath =
+    let
+        nextColumn =
+            columnDelta + currentColumn
+
+        nextRow =
+            rowDeltay + currentRow
+
+        piece =
+            Dict.get ( nextColumn, nextRow ) occupiedSquares
+
+        nextPath =
+            ( nextColumn, nextRow ) :: currentPath
+    in
+    if nextColumn == 0 || nextRow == 0 || nextColumn == 9 || nextRow == 9 then
+        []
+
+    else if ( nextColumn, nextRow ) == ( column, row ) && not (occupiedByFriendly piece turn) then
+        nextPath
+
+    else if occupiedSquare piece then
+        []
+
+    else
+        findPathRepeating ( columnDelta, rowDeltay ) ( column, row ) occupiedSquares ( nextColumn, nextRow ) turn nextPath
+
+
+horizontalMovement =
+    [ west
+    , east
+    , north
+    , south
+    ]
+
+
+diagonalMovement =
+    [ northWest
+    , northEast
+    , southWest
+    , southEast
+    ]
+
+
+west =
+    ( -1, 0 )
+
+
+east =
+    ( 1, 0 )
+
+
+north =
+    ( 0, 1 )
+
+
+south =
+    ( 0, -1 )
+
+
+northEast =
+    ( 1, 1 )
+
+
+southWest =
+    ( -1, -1 )
+
+
+southEast =
+    ( -1, 1 )
+
+
+northWest =
+    ( 1, -1 )
+
+
+checkMoveInDirection : ( Int, Int ) -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Bool
+checkMoveInDirection ( columnDelta, rowDeltay ) ( column, row ) occupiedSquares ( currentColumn, currentRow ) =
+    let
+        nextColumn =
+            columnDelta + currentColumn
+
+        nextRow =
+            rowDeltay + currentRow
+    in
+    if nextColumn == 0 || nextRow == 0 || nextColumn == 9 || nextRow == 9 then
+        False
+
+    else
+        ( nextColumn, nextRow ) == ( column, row )
+
+
+checkMoveInDirectionRepeating : ( Int, Int ) -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Turn -> Bool
+checkMoveInDirectionRepeating ( columnDelta, rowDeltay ) ( column, row ) occupiedSquares ( currentColumn, currentRow ) turn =
+    let
+        nextColumn =
+            columnDelta + currentColumn
+
+        nextRow =
+            rowDeltay + currentRow
+
+        piece =
+            Dict.get ( nextColumn, nextRow ) occupiedSquares
+    in
+    if nextColumn == 0 || nextRow == 0 || nextColumn == 9 || nextRow == 9 then
+        False
+
+    else if ( nextColumn, nextRow ) == ( column, row ) && not (occupiedByFriendly piece turn) then
+        True
+
+    else if occupiedSquare piece then
+        False
+
+    else
+        checkMoveInDirectionRepeating ( columnDelta, rowDeltay ) ( column, row ) occupiedSquares ( nextColumn, nextRow ) turn
+
+
+occupiedSquare : Maybe Piece -> Bool
+occupiedSquare piece =
+    case piece of
+        Nothing ->
+            False
+
+        Just (Piece _ t) ->
+            True
+
+
+occupiedByFriendly : Maybe Piece -> Turn -> Bool
+occupiedByFriendly piece (Turn team) =
+    case piece of
+        Nothing ->
+            False
+
+        Just (Piece t _) ->
+            t == team
 
 
 
