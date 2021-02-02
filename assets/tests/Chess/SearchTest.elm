@@ -18,7 +18,30 @@ all =
     describe "Chess"
         [ describe "forcingMoves" <|
             [ describe "recognizes checkmate as bottom" <|
-                [ test "will find checkmate" <|
+                [ test "mcst (monte carlo search tree) variant" <|
+                    \() ->
+                        let
+                            current =
+                                Game.Occupied (position Board.h1) monarch
+
+                            attackers =
+                                [ Game.Occupied (position Board.g8) opponentRook
+                                , Game.Occupied (position Board.g7) opponentRook
+                                ]
+
+                            game =
+                                Search.init (Game.initWithExistingState (attackers ++ [ current ]) (Game.Turn opponentTeam))
+                        in
+                        Expect.equal
+                            (Ok
+                                ( Search.BestFound "78-88" [ "77-87" ]
+                                , Search.Stats
+                                    (Search.DeepestNodeReached 0)
+                                )
+                            )
+                            --(Err Search.Failure)
+                            (Search.forcingMovesWithStats game)
+                , test "will find checkmate" <|
                     \() ->
                         let
                             current =

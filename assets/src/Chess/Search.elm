@@ -1,9 +1,14 @@
 module Chess.Search exposing
     ( Accumulator(..)
+    , BestFound(..)
+    , DeepestNodeReached(..)
+    , Failure(..)
     , ForcingWeight(..)
     , Model
-    , Msg
+    , Msg(..)
+    , Stats(..)
     , forcingMoves
+    , forcingMovesWithStats
     , init
     , update
     , view
@@ -21,16 +26,24 @@ import Html.Events exposing (onClick)
 type alias Model =
     { game : Game
     , forcedMoves : Maybe (List String)
+
+    -- V2
+    , moves : List SearchMove
     }
+
+
+type alias SearchMove =
+    String
 
 
 type Msg
     = FindForcingMoves
+    | FindForcingMovesWithStats
 
 
 init : Game -> Model
 init game =
-    Model game Nothing
+    Model game Nothing []
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -39,10 +52,82 @@ update msg model =
         FindForcingMoves ->
             ( { model | forcedMoves = Just <| forcingMoves model }, Cmd.none )
 
+        FindForcingMovesWithStats ->
+            ( model, Cmd.none )
+
 
 positionToSquareKey : Position -> ( Int, Int )
 positionToSquareKey (Position column row) =
     ( column, row )
+
+
+
+-- FORCING MOVES WITH STATS
+{-
+   Stats may be returned if desired from ForcingMoves.
+
+   forcingMovesWithStats : Model -> Result Search.Failure (Search.ForcingMovesPayload, Search.Stats)
+-}
+
+
+forcingMovesWithStats : Model -> Result Failure ( BestFound, Stats )
+forcingMovesWithStats { game } =
+    let
+        childrenThatResolveToCheckmate =
+            findCheckmatesWithStats game
+    in
+    case childrenThatResolveToCheckmate of
+        finishingMove :: otherMovesThatAlsoWin ->
+            Ok ( BestFound finishingMove otherMovesThatAlsoWin, Stats <| DeepestNodeReached 0 )
+
+        _ ->
+            --Game.canMoveTo
+            --if Game.isCheckmate game then
+            --    Ok <| BestFound
+            Err Failure
+
+
+findCheckmatesWithStats : Game -> List SearchMove
+findCheckmatesWithStats game =
+    List.concatMap (findCheckmatesForPositionWithStats game) Position.all
+
+
+findCheckmatesForPositionWithStats : Game -> Position -> List SearchMove
+findCheckmatesForPositionWithStats game ((Position column row) as squareTo) =
+    Game.canMoveTo ( column, row ) game
+        |> List.map (\( c, r ) -> Position c r)
+        |> List.filter (\squareFrom -> leadsToCheckmate squareFrom squareTo game)
+        |> List.map (\squareFromThatIsCheckmate -> squaresToMoveKey squareFromThatIsCheckmate squareTo)
+
+
+squaresToMoveKey : Position -> Position -> String
+squaresToMoveKey squareFrom squareTo =
+    Position.toString squareFrom ++ "-" ++ Position.toString squareTo
+
+
+type Stats
+    = Stats DeepestNodeReached
+
+
+type DeepestNodeReached
+    = DeepestNodeReached Int
+
+
+type Failure
+    = Failure
+
+
+
+-- Consider promoting this to Prelude
+--type ActiveList current
+--    = ActiveList (Viewed current) current (Remaining current)
+--
+--type Viewed current = Viewed current
+--type Remaining current = Remaining current
+
+
+type BestFound
+    = BestFound String (List String)
 
 
 
@@ -264,6 +349,7 @@ avoidsCheck squareFrom squareTo ((Game occupiedSquares moves ((Game.Turn team) a
                 |> List.isEmpty
                 |> not
     in
+    -- TODO: Add blockable &
     monarchIsAbleToEscape
 
 
