@@ -41,9 +41,9 @@ type Msg
     | FindForcingMovesWithStats
 
 
-init : Game -> Model
+init : Game -> ( Model, Cmd Msg )
 init game =
-    Model game Nothing []
+    ( Model game Nothing [], Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

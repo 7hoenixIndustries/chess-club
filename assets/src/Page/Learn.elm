@@ -130,13 +130,17 @@ update backend msg model =
                     let
                         ( chessModel, chessMsgs ) =
                             Chess.init scenario.availableMoves scenario.currentState
+
+                        ( searchModel, searchMsgs ) =
+                            Search.init chessModel.game
                     in
                     ( { model
-                        | scenarioStuff = Just <| ScenarioStuff scenario chessModel (Search.init chessModel.game)
+                        | scenarioStuff = Just <| ScenarioStuff scenario chessModel searchModel
                       }
                     , Cmd.batch
                         [ Js.createSubscriptions (subscribeToMoves scenario.id |> Graphql.Document.serializeSubscription)
                         , Cmd.map ChessMsg chessMsgs
+                        , Cmd.map SearchMsg searchMsgs
                         ]
                     )
 
