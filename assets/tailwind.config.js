@@ -19,10 +19,18 @@ module.exports = {
         '8': 'repeat(8, minmax(0, 1fr))',
       },
       width: {
-        '1/8': '12.5%'
+        '1/8': '12.5%',
+        'constrained-1/4': '25vw',
+        'constrained-40%': '40vw',
+        'constrained-1/2': '50vw',
+        'constrained-1': '100vw'
       },
       height: {
-        '1/8': '12.5%'
+        '1/8': '12.5%',
+        'constrained-1/4': '25vw',
+        'constrained-40%': '40vw',
+        'constrained-1/2': '50vw',
+        'constrained-1': '100vw'
       }
     },
   },

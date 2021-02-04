@@ -260,7 +260,7 @@ viewSelectScenario { id } =
 
 viewLearn : Maybe Scenario.Scenario -> Maybe Chess.Model -> SubscriptionStatus -> Html Msg
 viewLearn scenario chessModel subscriptionStatus =
-    div [ class "p-6 max-w-sm mx-auto bg-white rounded-xl shadow-md flex items-center space-x-4" ]
+    div [ class "container mx-auto flex items-center rounded-xl " ]
         [ case ( scenario, chessModel ) of
             ( Just s, Just c ) ->
                 viewScenario s c subscriptionStatus
@@ -282,7 +282,7 @@ viewLearn scenario chessModel subscriptionStatus =
 
 viewScenario : Scenario.Scenario -> Chess.Model -> SubscriptionStatus -> Html Msg
 viewScenario scenario chessModel subscriptionStatus =
-    div [ class "container flex flex-col mx-auto px-4" ]
+    div [ class "container mx-auto" ]
         [ viewConnection subscriptionStatus
         , Html.map ChessMsg (Chess.view chessModel)
         ]
