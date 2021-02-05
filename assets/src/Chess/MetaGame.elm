@@ -1,4 +1,4 @@
-module Chess.Game exposing
+module Chess.MetaGame exposing
     ( Callbacks
     , Color
     , Model
@@ -9,16 +9,20 @@ module Chess.Game exposing
     , fromFen
     , init
     , makeGame
+    , subscriptions
     , update
     , view
     )
 
+import Browser.Dom
+import Browser.Events exposing (onMouseMove)
 import Dict exposing (Dict)
-import Html exposing (Attribute, Html, div, fieldset, input, label, text)
+import Html exposing (Attribute, Html, div, fieldset, input, label, span, text)
 import Html.Attributes exposing (checked, class, classList, name, type_)
-import Html.Events exposing (onClick, onInput, onMouseLeave, onMouseOver)
+import Html.Events exposing (on, onClick, onInput, onMouseDown, onMouseLeave, onMouseOver)
 import Json.Decode as D
 import Json.Encode as E
+import List.Extra
 import Page.Learn.Scenario exposing (Move)
 import Svg exposing (Svg, circle, g, svg)
 import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y)
@@ -26,6 +30,22 @@ import Task
 
 
 
+{-
+
+   Metagame Trainer - The perspective of the General.
+
+   It aims to feed you the tactics that you would get to practice in order to be
+   a [Rated](https://en.wikipedia.org/wiki/Chess_rating_system) Chess player.
+
+
+   Motivation:
+
+   Generals have colonels and stuff that would tell them tactics (and their best council generally).
+   -> And to be clear. . . if you want any real success at Chess then you will get to practice those as well.
+
+   This module is about starting to practice the meta game of Chess earlier than has previously been possible.
+
+-}
 -- MODEL
 
 
@@ -33,7 +53,26 @@ type alias Model =
     { game : Game
     , considering : Considering
     , playerColor : Color
+    , dragStuff : DragStuff
     }
+
+
+type DragStuff
+    = PieceInHand DragStuffInner
+    | NoPieceInHand
+
+
+type alias DragStuffInner =
+    { x : Int
+    , y : Int
+    , piece : Piece
+    , startingPosition : Position
+    , dragState : DragState
+    }
+
+
+type DragState
+    = Moving Int Int Int Int
 
 
 type Game
@@ -79,7 +118,7 @@ blankBoard =
 
 init : List Move -> String -> Model
 init availableMoves currentState =
-    Model (makeGame availableMoves currentState) NotConsidering Black
+    Model (makeGame availableMoves currentState) NotConsidering Black NoPieceInHand
 
 
 makeGame : List Move -> String -> Game
@@ -98,10 +137,16 @@ type Msg
     | StopHovering
     | MakeMove Move
     | NoOp
+      -- Drag And Drop
+    | StartDragging Int Int Position Piece
+    | MoveDragging Int Int
+    | StopDragging Int Int
+    | MakeMoveIfDragIsOnBoard DragStuffInner (Result Browser.Dom.Error Browser.Dom.Element)
 
 
 type alias Callbacks msg =
     { makeMove : Move -> msg
+    , mapMsg : Msg -> msg
     }
 
 
@@ -138,16 +183,137 @@ update callbacks msg model =
         NoOp ->
             ( model, Cmd.none )
 
+        -- Drag and Drop
+        StartDragging x y startingPosition piece ->
+            case model.dragStuff of
+                NoPieceInHand ->
+                    let
+                        initialDragStuff =
+                            PieceInHand { x = x, y = y, dragState = Moving x y x y, startingPosition = startingPosition, piece = piece }
+                    in
+                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game }, Cmd.none )
+
+                PieceInHand _ ->
+                    ( model, Cmd.none )
+
+        MoveDragging currentX currentY ->
+            case model.dragStuff of
+                NoPieceInHand ->
+                    ( model, Cmd.none )
+
+                PieceInHand ({ dragState } as dragStuffInner) ->
+                    let
+                        (Moving startX startY _ _) =
+                            dragState
+
+                        updatedDragState =
+                            Moving startX startY currentX currentY
+                    in
+                    ( { model | dragStuff = PieceInHand { dragStuffInner | dragState = updatedDragState } }, Cmd.none )
+
+        StopDragging currentX currentY ->
+            case model.dragStuff of
+                NoPieceInHand ->
+                    ( model, Cmd.none )
+
+                PieceInHand ({ x, y, dragState } as dragStuffInner) ->
+                    let
+                        (Moving startX startY _ _) =
+                            dragState
+
+                        updatedDragStuffInner =
+                            { dragStuffInner | x = x + currentX - startX, y = y + currentY - startY }
+                    in
+                    ( { model | dragStuff = NoPieceInHand }, Task.attempt (callbacks.mapMsg << MakeMoveIfDragIsOnBoard updatedDragStuffInner) (Browser.Dom.getElement "main-board") )
+
+        MakeMoveIfDragIsOnBoard ({ piece, startingPosition } as dragStuffInner) result ->
+            case result of
+                Err err ->
+                    ( model, Cmd.none )
+
+                Ok boardElement ->
+                    case positionOnBoard dragStuffInner boardElement.element of
+                        Nothing ->
+                            ( { model | game = placePiece startingPosition piece model.game }, Cmd.none )
+
+                        Just finalPosition ->
+                            ( { model | game = placePiece finalPosition piece model.game }, Cmd.none )
 
 
+
+-- GAME UPDATES
+
+
+removePiece : Position -> Game -> Game
+removePiece position (Game pieces moves turn) =
+    Dict.remove position pieces
+        |> (\updatedPieces -> Game updatedPieces moves turn)
+
+
+placePiece : Position -> Piece -> Game -> Game
+placePiece position piece (Game pieces moves turn) =
+    Dict.insert position piece pieces
+        |> (\updatedPieces -> Game updatedPieces moves turn)
+
+
+
+-- 300 <= 301 <= 300 + 100
+-- 100 / 8    ->     12.5
+--
+-- x = 73
+-- board.initialX = 51.5
+-- board.width = 736
+--
+-- x - board.initialX
+-- 73 - 51.5        --> 22
+-- board.width / 8  --> board.square.width
+-- 736 / 8          --> 92
+-- if 22 within (1 - 92)
+
+
+positionOnBoard : DragStuffInner -> { x : Float, y : Float, width : Float, height : Float } -> Maybe Position
+positionOnBoard { x, y, dragState } element =
+    if x >= round element.x && x <= round (element.x + element.width) then
+        let
+            xIntercept =
+                List.Extra.find (findIntercept element.x element.width x) (List.range 1 8)
+                    |> Maybe.map (\v -> 9 - v)
+
+            yIntercept =
+                List.Extra.find (findIntercept element.y element.height y) (List.range 1 8)
+        in
+        Maybe.map2 Tuple.pair xIntercept yIntercept
+
+    else
+        Nothing
+
+
+findIntercept : Float -> Float -> Int -> Int -> Bool
+findIntercept boardStart boardSize coordinate pos =
+    let
+        coordinateJustified =
+            coordinate - round boardStart
+
+        squareSize =
+            round <| boardSize / 8
+
+        potentialPosition =
+            pos * squareSize
+    in
+    coordinateJustified > (potentialPosition - squareSize) && coordinateJustified <= potentialPosition
+
+
+
+--potentialPosition >= xJustified && potentialPosition <= round (boardX + boardWidth)
+--False
 -- VIEW BOARD
 
 
 view : Model -> Html Msg
-view { game, considering, playerColor } =
+view { game, considering, playerColor, dragStuff } =
     div [ class "container mx-auto" ]
         [ viewTurn game playerColor
-        , viewBoard game considering playerColor
+        , viewBoard game considering playerColor dragStuff
         , viewSettings playerColor
         ]
 
@@ -182,16 +348,20 @@ viewTurn (Game _ _ (Turn color)) playerColor =
         ]
 
 
-viewBoard : Game -> Considering -> Color -> Html Msg
-viewBoard ((Game _ _ (Turn turnColor)) as game) considering playerColor =
-    div
-        [ classList
-            [ ( "h-96 w-96 md:h-constrained-1/2 md:w-constrained-1/2 lg:h-constrained-40% lg:w-constrained-40% 2xl:h-constrained-40% 2xl:w-constrained-40% grid grid-cols-8 grid-rows-8 border-2 border-gray-500 gap-0 shadow-2xl", True )
-            , ( "rotated", playerColor == White )
+viewBoard : Game -> Considering -> Color -> DragStuff -> Html Msg
+viewBoard ((Game _ _ (Turn turnColor)) as game) considering playerColor dragStuff =
+    div []
+        [ viewGhostSquare game considering playerColor dragStuff
+        , div
+            [ id "main-board"
+            , classList
+                [ ( "h-96 w-96 md:h-constrained-1/2 md:w-constrained-1/2 lg:h-constrained-40% lg:w-constrained-40% 2xl:h-constrained-40% 2xl:w-constrained-40% grid grid-cols-8 grid-rows-8 border-2 border-gray-500 gap-0 shadow-2xl", True )
+                , ( "rotated", playerColor == White )
+                ]
+            , onMouseLeave StopHovering
             ]
-        , onMouseLeave StopHovering
+            (List.concatMap (viewRow game considering playerColor) (List.range 1 8))
         ]
-        (List.concatMap (viewRow game considering playerColor) (List.range 1 8))
 
 
 viewRow : Game -> Considering -> Color -> Int -> List (Html Msg)
@@ -212,35 +382,93 @@ viewCell game considering playerColor row column =
         [ viewSquare game considering playerColor ( column, row ) ]
 
 
+viewGhostSquare : Game -> Considering -> Color -> DragStuff -> Html Msg
+viewGhostSquare (Game pieces moves ((Turn turnColor) as turn)) considering playerColor dragStuff =
+    case dragStuff of
+        NoPieceInHand ->
+            span [] []
+
+        PieceInHand ({ piece } as dragStuffInner) ->
+            let
+                ( x, y ) =
+                    getDragCoordinates dragStuffInner
+            in
+            div
+                [ classList
+                    [ ( "bg-blue-900", True )
+                    , ( "grid-cols-none", True )
+                    , ( "absolute", True )
+                    , ( "z-50", True )
+                    , ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
+                    ]
+                , style ("left: " ++ String.fromInt x ++ "px; top: " ++ String.fromInt y ++ "px")
+                , on "mouseup" (D.map2 StopDragging pageX pageY)
+                ]
+                [ findSvg piece [] ]
+
+
+getDragCoordinates : DragStuffInner -> ( Int, Int )
+getDragCoordinates { x, y, dragState } =
+    let
+        (Moving startX startY endX endY) =
+            dragState
+    in
+    ( x + endX - startX, y + endY - startY )
+
+
 viewSquare : Game -> Considering -> Color -> Position -> Html Msg
 viewSquare (Game pieces moves ((Turn turnColor) as turn)) considering playerColor position =
     if turnColor == playerColor then
-        case considering of
-            NotConsidering ->
-                viewSquareDetails pieces
-                    position
+        case Dict.get position pieces of
+            Just piece ->
+                div
+                    [ classList
+                        [ ( "w-full h-full m-0", True )
+                        ]
+                    , on "mousedown" (D.map4 StartDragging pageX pageY (D.succeed position) (D.succeed piece))
+                    ]
+                    [ findSvg piece [] ]
+
+            Nothing ->
+                div
+                    [ classList
+                        [ ( "w-full h-full m-0", True )
+                        ]
+                    ]
                     []
-                    [ onClick <| StartConsidering position
-                    , onMouseOver <| StartHovering position
-                    ]
-
-            HoveringOver consideringPosition ->
-                viewSquareDetails pieces
-                    position
-                    [ ( "bg-green-500", hasFriendlyMovesToPosition turn consideringPosition position moves )
-                    ]
-                    [ onClick <| StartConsidering position
-                    , onMouseOver <| StartHovering position
-                    ]
-
-            ConsideringMovingTo consideringPosition ->
-                viewSquareDetails pieces
-                    position
-                    [ ( "bg-green-500", hasFriendlyMovesToPosition turn consideringPosition position moves )
-                    , ( "bg-yellow-500", hasEnemyMovesToPosition turn consideringPosition position moves )
-                    ]
-                    [ onClick <| handleConsideringMovingTo turn consideringPosition position moves
-                    ]
+        --viewSquareDetails pieces
+        --    position
+        --    []
+        --    [ on "mousedown" (D.map3 StartDragging pageX pageY (D.succeed position))
+        --
+        --    --, on "mouseup" (D.map3 StopDragging pageX pageY)
+        --    ]
+        --case considering of
+        --    NotConsidering ->
+        --        viewSquareDetails pieces
+        --            position
+        --            []
+        --            [ onClick <| StartConsidering position
+        --            , onMouseOver <| StartHovering position
+        --            ]
+        --
+        --    HoveringOver consideringPosition ->
+        --        viewSquareDetails pieces
+        --            position
+        --            [ ( "bg-green-500", hasFriendlyMovesToPosition turn consideringPosition position moves )
+        --            ]
+        --            [ onClick <| StartConsidering position
+        --            , onMouseOver <| StartHovering position
+        --            ]
+        --
+        --    ConsideringMovingTo consideringPosition ->
+        --        viewSquareDetails pieces
+        --            position
+        --            [ ( "bg-green-500", hasFriendlyMovesToPosition turn consideringPosition position moves )
+        --            , ( "bg-yellow-500", hasEnemyMovesToPosition turn consideringPosition position moves )
+        --            ]
+        --            [ onClick <| handleConsideringMovingTo turn consideringPosition position moves
+        --            ]
 
     else
         viewSquareDetails pieces position [] []
@@ -602,3 +830,27 @@ whiteMonarch extraAttributes =
 svgWithViewPort : List (Svg msg) -> Html msg
 svgWithViewPort =
     svg [ viewBox "-6 -6 60 60", version "1.1", width "100%", height "100%" ]
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    case model.dragStuff of
+        NoPieceInHand ->
+            Sub.none
+
+        PieceInHand _ ->
+            onMouseMove (D.map2 MoveDragging pageX pageY)
+
+
+pageX : D.Decoder Int
+pageX =
+    D.field "pageX" D.int
+
+
+pageY : D.Decoder Int
+pageY =
+    D.field "pageY" D.int

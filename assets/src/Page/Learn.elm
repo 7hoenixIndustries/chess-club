@@ -9,7 +9,7 @@ module Page.Learn exposing
 
 import Api.Scalar exposing (Id)
 import Backend exposing (Backend)
-import Chess.Game as Chess
+import Chess.MetaGame as Chess
 import Graphql.Document
 import Graphql.Http
 import Html exposing (..)
@@ -19,6 +19,7 @@ import Html.Lazy exposing (..)
 import Js
 import Json.Decode
 import Page.Learn.Scenario as Scenario exposing (Move, scenarioSelection, subscribeToMoves)
+import Prelude
 import Session
 import Skeleton
 
@@ -59,7 +60,8 @@ init backend session =
         Nothing ->
             ( Model Nothing session Loading NotConnected Nothing
             , Cmd.batch
-                [ Scenario.getScenarios backend GotScenarios
+                --[ Scenario.getScenarios backend GotScenarios
+                [ Scenario.getScenario backend (Api.Scalar.Id "3") GotScenario
                 ]
             )
 
@@ -90,7 +92,7 @@ update backend msg model =
                     ( model, Cmd.none )
 
                 Just chessModel ->
-                    stepChess model (Chess.update (Chess.Callbacks MakeMove) chessMsg chessModel)
+                    stepChess model (Chess.update (Chess.Callbacks MakeMove ChessMsg) chessMsg chessModel)
 
         CreateScenario ->
             ( model, Scenario.createScenario backend ScenarioCreated )
@@ -307,4 +309,5 @@ subscriptions model =
         [ Js.gotSubscriptionData SubscriptionDataReceived
         , Js.socketStatusConnected (NewSubscriptionStatus Connected)
         , Js.socketStatusReconnecting (NewSubscriptionStatus Reconnecting)
+        , Prelude.maybe Sub.none (\chessModel -> Sub.map ChessMsg (Chess.subscriptions chessModel)) model.chessModel
         ]
