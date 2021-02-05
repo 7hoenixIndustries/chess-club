@@ -24,6 +24,7 @@ import Json.Decode as D
 import Json.Encode as E
 import List.Extra
 import Page.Learn.Scenario exposing (Move)
+import Prelude
 import Svg exposing (Svg, circle, g, svg)
 import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y)
 import Task
@@ -54,6 +55,7 @@ type alias Model =
     , considering : Considering
     , playerColor : Color
     , dragStuff : DragStuff
+    , squareSize : Maybe Int
     }
 
 
@@ -118,7 +120,7 @@ blankBoard =
 
 init : List Move -> String -> Model
 init availableMoves currentState =
-    Model (makeGame availableMoves currentState) NotConsidering Black NoPieceInHand
+    Model (makeGame availableMoves currentState) NotConsidering Black NoPieceInHand Nothing
 
 
 makeGame : List Move -> String -> Game
@@ -142,6 +144,7 @@ type Msg
     | MoveDragging Int Int
     | StopDragging Int Int
     | MakeMoveIfDragIsOnBoard DragStuffInner (Result Browser.Dom.Error Browser.Dom.Element)
+    | SetSquareSize (Result Browser.Dom.Error Browser.Dom.Element)
 
 
 type alias Callbacks msg =
@@ -191,7 +194,7 @@ update callbacks msg model =
                         initialDragStuff =
                             PieceInHand { x = x, y = y, dragState = Moving x y x y, startingPosition = startingPosition, piece = piece }
                     in
-                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game }, Cmd.none )
+                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game }, Task.attempt (callbacks.mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board") )
 
                 PieceInHand _ ->
                     ( model, Cmd.none )
@@ -238,6 +241,16 @@ update callbacks msg model =
 
                         Just finalPosition ->
                             ( { model | game = placePiece finalPosition piece model.game }, Cmd.none )
+
+        -- TODO: use this instead: https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onResize
+        -- Will make all piece sizes look the same.
+        SetSquareSize result ->
+            case result of
+                Err err ->
+                    ( model, Cmd.none )
+
+                Ok boardElement ->
+                    ( { model | squareSize = Just (round <| boardElement.element.width / 8) }, Cmd.none )
 
 
 
@@ -304,16 +317,14 @@ findIntercept boardStart boardSize coordinate pos =
 
 
 
---potentialPosition >= xJustified && potentialPosition <= round (boardX + boardWidth)
---False
 -- VIEW BOARD
 
 
 view : Model -> Html Msg
-view { game, considering, playerColor, dragStuff } =
+view { game, considering, playerColor, dragStuff, squareSize } =
     div [ class "container mx-auto" ]
         [ viewTurn game playerColor
-        , viewBoard game considering playerColor dragStuff
+        , viewBoard game considering playerColor dragStuff squareSize
         , viewSettings playerColor
         ]
 
@@ -348,10 +359,10 @@ viewTurn (Game _ _ (Turn color)) playerColor =
         ]
 
 
-viewBoard : Game -> Considering -> Color -> DragStuff -> Html Msg
-viewBoard ((Game _ _ (Turn turnColor)) as game) considering playerColor dragStuff =
+viewBoard : Game -> Considering -> Color -> DragStuff -> Maybe Int -> Html Msg
+viewBoard ((Game _ _ (Turn turnColor)) as game) considering playerColor dragStuff squareSize =
     div []
-        [ viewGhostSquare game considering playerColor dragStuff
+        [ Prelude.maybe (span [] []) (viewGhostSquare game considering playerColor dragStuff) squareSize
         , div
             [ id "main-board"
             , classList
@@ -382,8 +393,8 @@ viewCell game considering playerColor row column =
         [ viewSquare game considering playerColor ( column, row ) ]
 
 
-viewGhostSquare : Game -> Considering -> Color -> DragStuff -> Html Msg
-viewGhostSquare (Game pieces moves ((Turn turnColor) as turn)) considering playerColor dragStuff =
+viewGhostSquare : Game -> Considering -> Color -> DragStuff -> Int -> Html Msg
+viewGhostSquare (Game pieces moves ((Turn turnColor) as turn)) considering playerColor dragStuff squareSize =
     case dragStuff of
         NoPieceInHand ->
             span [] []
@@ -395,16 +406,26 @@ viewGhostSquare (Game pieces moves ((Turn turnColor) as turn)) considering playe
             in
             div
                 [ classList
-                    [ ( "bg-blue-900", True )
+                    [ ( "bg-transparent", True )
                     , ( "grid-cols-none", True )
                     , ( "absolute", True )
                     , ( "z-50", True )
                     , ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
                     ]
-                , style ("left: " ++ String.fromInt x ++ "px; top: " ++ String.fromInt y ++ "px")
+                , styleList
+                    [ "left: " ++ String.fromInt (x - (squareSize // 2)) ++ "px"
+                    , "top: " ++ String.fromInt (y - (squareSize // 2)) ++ "px"
+                    , "cursor: grabbing"
+                    ]
                 , on "mouseup" (D.map2 StopDragging pageX pageY)
                 ]
                 [ findSvg piece [] ]
+
+
+styleList : List String -> Attribute Msg
+styleList styles =
+    String.join "; " styles
+        |> style
 
 
 getDragCoordinates : DragStuffInner -> ( Int, Int )
@@ -425,6 +446,7 @@ viewSquare (Game pieces moves ((Turn turnColor) as turn)) considering playerColo
                     [ classList
                         [ ( "w-full h-full m-0", True )
                         ]
+                    , style "cursor: grab"
                     , on "mousedown" (D.map4 StartDragging pageX pageY (D.succeed position) (D.succeed piece))
                     ]
                     [ findSvg piece [] ]
