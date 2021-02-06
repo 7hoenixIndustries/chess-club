@@ -55,6 +55,8 @@ type alias Model =
     , considering : Considering
     , playerColor : Color
     , dragStuff : DragStuff
+
+    -- responsive : Responsive
     , squareSize : Maybe Int
     }
 
@@ -192,9 +194,17 @@ update callbacks msg model =
                 NoPieceInHand ->
                     let
                         initialDragStuff =
-                            PieceInHand { x = x, y = y, dragState = Moving x y x y, startingPosition = startingPosition, piece = piece }
+                            PieceInHand
+                                { x = x
+                                , y = y
+                                , dragState = Moving x y x y
+                                , startingPosition = startingPosition
+                                , piece = piece
+                                }
                     in
-                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game }, Task.attempt (callbacks.mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board") )
+                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game }
+                    , Task.attempt (callbacks.mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
+                    )
 
                 PieceInHand _ ->
                     ( model, Cmd.none )
@@ -227,7 +237,9 @@ update callbacks msg model =
                         updatedDragStuffInner =
                             { dragStuffInner | x = x + currentX - startX, y = y + currentY - startY }
                     in
-                    ( { model | dragStuff = NoPieceInHand }, Task.attempt (callbacks.mapMsg << MakeMoveIfDragIsOnBoard updatedDragStuffInner) (Browser.Dom.getElement "main-board") )
+                    ( { model | dragStuff = NoPieceInHand }
+                    , Task.attempt (callbacks.mapMsg << MakeMoveIfDragIsOnBoard updatedDragStuffInner) (Browser.Dom.getElement "main-board")
+                    )
 
         MakeMoveIfDragIsOnBoard ({ piece, startingPosition } as dragStuffInner) result ->
             let
@@ -246,11 +258,15 @@ update callbacks msg model =
                         Just finalPosition ->
                             case friendlyMovesToPosition turn finalPosition startingPosition moves of
                                 move :: [] ->
-                                    ( { model | game = placePiece finalPosition piece model.game }, Task.perform callbacks.makeMove (Task.succeed move) )
+                                    ( { model | game = placePiece finalPosition piece model.game }
+                                    , Task.perform callbacks.makeMove (Task.succeed move)
+                                    )
 
                                 promotionMove :: _ ->
                                     -- TODO: busted.
-                                    ( { model | game = placePiece finalPosition piece model.game }, Task.perform callbacks.makeMove (Task.succeed promotionMove) )
+                                    ( { model | game = placePiece finalPosition piece model.game }
+                                    , Task.perform callbacks.makeMove (Task.succeed promotionMove)
+                                    )
 
                                 [] ->
                                     ( { model | game = placePiece startingPosition piece model.game }, Cmd.none )
@@ -281,21 +297,6 @@ placePiece : Position -> Piece -> Game -> Game
 placePiece position piece (Game pieces moves turn) =
     Dict.insert position piece pieces
         |> (\updatedPieces -> Game updatedPieces moves turn)
-
-
-
--- 300 <= 301 <= 300 + 100
--- 100 / 8    ->     12.5
---
--- x = 73
--- board.initialX = 51.5
--- board.width = 736
---
--- x - board.initialX
--- 73 - 51.5        --> 22
--- board.width / 8  --> board.square.width
--- 736 / 8          --> 92
--- if 22 within (1 - 92)
 
 
 positionOnBoard : DragStuffInner -> { x : Float, y : Float, width : Float, height : Float } -> Turn -> Maybe Position
