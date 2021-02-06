@@ -230,20 +230,34 @@ update callbacks msg model =
                     ( { model | dragStuff = NoPieceInHand }, Task.attempt (callbacks.mapMsg << MakeMoveIfDragIsOnBoard updatedDragStuffInner) (Browser.Dom.getElement "main-board") )
 
         MakeMoveIfDragIsOnBoard ({ piece, startingPosition } as dragStuffInner) result ->
+            let
+                (Game _ moves turn) =
+                    model.game
+            in
             case result of
                 Err err ->
                     ( model, Cmd.none )
 
                 Ok boardElement ->
-                    case positionOnBoard dragStuffInner boardElement.element of
+                    case positionOnBoard dragStuffInner boardElement.element turn of
                         Nothing ->
                             ( { model | game = placePiece startingPosition piece model.game }, Cmd.none )
 
                         Just finalPosition ->
-                            ( { model | game = placePiece finalPosition piece model.game }, Cmd.none )
+                            case friendlyMovesToPosition turn finalPosition startingPosition moves of
+                                move :: [] ->
+                                    ( { model | game = placePiece finalPosition piece model.game }, Task.perform callbacks.makeMove (Task.succeed move) )
+
+                                promotionMove :: _ ->
+                                    -- TODO: busted.
+                                    ( { model | game = placePiece finalPosition piece model.game }, Task.perform callbacks.makeMove (Task.succeed promotionMove) )
+
+                                [] ->
+                                    ( { model | game = placePiece startingPosition piece model.game }, Cmd.none )
 
         -- TODO: use this instead: https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onResize
         -- Will make all piece sizes look the same.
+        -- Get the whole board element and then look it up whenever we need it and subscribe to changes.
         SetSquareSize result ->
             case result of
                 Err err ->
@@ -284,16 +298,18 @@ placePiece position piece (Game pieces moves turn) =
 -- if 22 within (1 - 92)
 
 
-positionOnBoard : DragStuffInner -> { x : Float, y : Float, width : Float, height : Float } -> Maybe Position
-positionOnBoard { x, y, dragState } element =
+positionOnBoard : DragStuffInner -> { x : Float, y : Float, width : Float, height : Float } -> Turn -> Maybe Position
+positionOnBoard { x, y, dragState } element turn =
     if x >= round element.x && x <= round (element.x + element.width) then
         let
             xIntercept =
                 List.Extra.find (findIntercept element.x element.width x) (List.range 1 8)
                     |> Maybe.map (\v -> 9 - v)
+                    |> Maybe.map (reverseIfWhite turn)
 
             yIntercept =
                 List.Extra.find (findIntercept element.y element.height y) (List.range 1 8)
+                    |> Maybe.map (reverseIfWhite turn)
         in
         Maybe.map2 Tuple.pair xIntercept yIntercept
 
@@ -314,6 +330,15 @@ findIntercept boardStart boardSize coordinate pos =
             pos * squareSize
     in
     coordinateJustified > (potentialPosition - squareSize) && coordinateJustified <= potentialPosition
+
+
+reverseIfWhite : Turn -> Int -> Int
+reverseIfWhite (Turn color) idx =
+    if color == White then
+        9 - idx
+
+    else
+        idx
 
 
 
