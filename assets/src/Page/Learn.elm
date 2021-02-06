@@ -61,7 +61,7 @@ init backend session =
             ( Model Nothing session Loading NotConnected Nothing
             , Cmd.batch
                 --[ Scenario.getScenarios backend GotScenarios
-                [ Scenario.getScenario backend (Api.Scalar.Id "3") GotScenario
+                [ Scenario.getScenario backend (Api.Scalar.Id "1") GotScenario
                 ]
             )
 
@@ -123,12 +123,19 @@ update backend msg model =
                     )
 
                 Ok scenario ->
+                    let
+                        ( chessModel, chessMsg ) =
+                            Chess.init scenario.availableMoves scenario.currentState ChessMsg
+                    in
                     -- TODO: chessModel is directly dependent on scenario. . . are we able to combine these somehow?
                     ( { model
                         | scenario = Just scenario
-                        , chessModel = Just <| Chess.init scenario.availableMoves scenario.currentState
+                        , chessModel = Just chessModel
                       }
-                    , Js.createSubscriptions (subscribeToMoves scenario.id |> Graphql.Document.serializeSubscription)
+                    , Cmd.batch
+                        [ Js.createSubscriptions (subscribeToMoves scenario.id |> Graphql.Document.serializeSubscription)
+                        , chessMsg
+                        ]
                     )
 
         MakeMove move ->
@@ -240,7 +247,7 @@ viewScenarios scenarios =
                 div []
                     ([ button [ onClick CreateScenario ] [ text "Create Scenario" ]
                      ]
-                        ++ List.map viewSelectScenario ss
+                        ++ List.map (lazy viewSelectScenario) ss
                     )
         ]
 
@@ -265,7 +272,7 @@ viewLearn scenario chessModel subscriptionStatus =
     div [ class "container mx-auto flex items-center rounded-xl " ]
         [ case ( scenario, chessModel ) of
             ( Just s, Just c ) ->
-                viewScenario s c subscriptionStatus
+                lazy3 viewScenario s c subscriptionStatus
 
             ( Nothing, Just _ ) ->
                 div [] [ text "Scenario not loaded." ]
@@ -286,7 +293,7 @@ viewScenario : Scenario.Scenario -> Chess.Model -> SubscriptionStatus -> Html Ms
 viewScenario scenario chessModel subscriptionStatus =
     div [ class "container mx-auto" ]
         [ viewConnection subscriptionStatus
-        , Html.map ChessMsg (Chess.view chessModel)
+        , Html.map ChessMsg (lazy Chess.view chessModel)
         ]
 
 

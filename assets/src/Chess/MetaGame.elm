@@ -14,12 +14,30 @@ module Chess.MetaGame exposing
     , view
     )
 
+{-
+
+   Metagame Trainer - The perspective of the General.
+
+   It aims to feed you the tactics that you would get to practice in order to be
+   a [Rated](https://en.wikipedia.org/wiki/Chess_rating_system) Chess player.
+
+
+   Motivation:
+
+   Generals have colonels and stuff that would tell them tactics (and their best council generally).
+   -> And to be clear. . . if you want any real success at Chess then you will get to practice those skills as well.
+
+   But this module is about starting to practice the meta game of Chess earlier than has previously been possible.
+
+-}
+
 import Browser.Dom
 import Browser.Events exposing (onMouseMove)
 import Dict exposing (Dict)
 import Html exposing (Attribute, Html, div, fieldset, input, label, span, text)
 import Html.Attributes exposing (checked, class, classList, name, type_)
 import Html.Events exposing (on, onClick, onInput, onMouseDown, onMouseLeave, onMouseOver)
+import Html.Lazy exposing (lazy, lazy2, lazy3, lazy4, lazy5, lazy6)
 import Json.Decode as D
 import Json.Encode as E
 import List.Extra
@@ -32,21 +50,21 @@ import Task
 
 
 {-
+   This is the public interface for using this module.
 
-   Metagame Trainer - The perspective of the General.
+   You need to declare these callbacks in order to hook it up.
 
-   It aims to feed you the tactics that you would get to practice in order to be
-   a [Rated](https://en.wikipedia.org/wiki/Chess_rating_system) Chess player.
-
-
-   Motivation:
-
-   Generals have colonels and stuff that would tell them tactics (and their best council generally).
-   -> And to be clear. . . if you want any real success at Chess then you will get to practice those as well.
-
-   This module is about starting to practice the meta game of Chess earlier than has previously been possible.
-
+   - makeMove -> Hook up to it a make move function that persists user actions to the backend. Feel free to wrap it.
 -}
+
+
+type alias Callbacks msg =
+    { makeMove : Move -> msg
+    , mapMsg : Msg -> msg
+    }
+
+
+
 -- MODEL
 
 
@@ -54,7 +72,12 @@ type alias Model =
     { game : Game
     , considering : Considering
     , playerColor : Color
+    , reinforcing : List Move
     , dragStuff : DragStuff
+
+    -- TODO: Bleh. Do not like the direct dependency on Browser.Dom.Element
+    -- Also that its a maybe.
+    , browserBoard : Maybe Browser.Dom.Element
 
     -- responsive : Responsive
     , squareSize : Maybe Int
@@ -80,7 +103,7 @@ type DragState
 
 
 type Game
-    = Game (Dict Position Piece) (List Move) Turn
+    = Game (Dict Position Piece) (List Move) (Dict MoveKey Move) Turn
 
 
 type alias Position =
@@ -117,12 +140,14 @@ type Considering
 
 blankBoard : Game
 blankBoard =
-    Game Dict.empty [] (Turn Black)
+    Game Dict.empty [] Dict.empty (Turn Black)
 
 
-init : List Move -> String -> Model
-init availableMoves currentState =
-    Model (makeGame availableMoves currentState) NotConsidering Black NoPieceInHand Nothing
+init : List Move -> String -> (Msg -> msg) -> ( Model, Cmd msg )
+init availableMoves currentState mapMsg =
+    ( Model (makeGame availableMoves currentState) NotConsidering Black [] NoPieceInHand Nothing Nothing
+    , Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
+    )
 
 
 makeGame : List Move -> String -> Game
@@ -140,19 +165,13 @@ type Msg
     | StartHovering Position
     | StopHovering
     | MakeMove Move
-    | NoOp
       -- Drag And Drop
     | StartDragging Int Int Position Piece
     | MoveDragging Int Int
     | StopDragging Int Int
     | MakeMoveIfDragIsOnBoard DragStuffInner (Result Browser.Dom.Error Browser.Dom.Element)
     | SetSquareSize (Result Browser.Dom.Error Browser.Dom.Element)
-
-
-type alias Callbacks msg =
-    { makeMove : Move -> msg
-    , mapMsg : Msg -> msg
-    }
+    | StoreCopyOfBrowserBoard (Result Browser.Dom.Error Browser.Dom.Element)
 
 
 
@@ -161,7 +180,7 @@ type alias Callbacks msg =
 
 update : Callbacks msg -> Msg -> Model -> ( Model, Cmd msg )
 update callbacks msg model =
-    case msg of
+    case Debug.log "msg" msg of
         ChangeTeam color ->
             ( { model | playerColor = color }, Cmd.none )
 
@@ -185,9 +204,6 @@ update callbacks msg model =
         MakeMove move ->
             ( { model | considering = NotConsidering }, Task.perform callbacks.makeMove (Task.succeed move) )
 
-        NoOp ->
-            ( model, Cmd.none )
-
         -- Drag and Drop
         StartDragging x y startingPosition piece ->
             case model.dragStuff of
@@ -210,19 +226,35 @@ update callbacks msg model =
                     ( model, Cmd.none )
 
         MoveDragging currentX currentY ->
+            let
+                (Game _ _ _ turn) =
+                    model.game
+            in
             case model.dragStuff of
                 NoPieceInHand ->
-                    ( model, Cmd.none )
+                    ( { model | reinforcing = [] }, Cmd.none )
 
-                PieceInHand ({ dragState } as dragStuffInner) ->
+                PieceInHand ({ dragState, startingPosition } as dragStuffInner) ->
                     let
                         (Moving startX startY _ _) =
                             dragState
 
                         updatedDragState =
                             Moving startX startY currentX currentY
+
+                        updatedDragStuffInner =
+                            { dragStuffInner | dragState = updatedDragState }
+
+                        reinforcingUpdates =
+                            Maybe.andThen (\browserBoard -> findCurrentPosition updatedDragStuffInner browserBoard.element turn) model.browserBoard
+                                |> Prelude.maybe [] (\current -> calculateReinforcingSquares startingPosition current model.game)
                     in
-                    ( { model | dragStuff = PieceInHand { dragStuffInner | dragState = updatedDragState } }, Cmd.none )
+                    ( { model
+                        | dragStuff = PieceInHand updatedDragStuffInner
+                        , reinforcing = reinforcingUpdates
+                      }
+                    , Cmd.none
+                    )
 
         StopDragging currentX currentY ->
             case model.dragStuff of
@@ -237,13 +269,13 @@ update callbacks msg model =
                         updatedDragStuffInner =
                             { dragStuffInner | x = x + currentX - startX, y = y + currentY - startY }
                     in
-                    ( { model | dragStuff = NoPieceInHand }
+                    ( { model | dragStuff = NoPieceInHand, reinforcing = [] }
                     , Task.attempt (callbacks.mapMsg << MakeMoveIfDragIsOnBoard updatedDragStuffInner) (Browser.Dom.getElement "main-board")
                     )
 
         MakeMoveIfDragIsOnBoard ({ piece, startingPosition } as dragStuffInner) result ->
             let
-                (Game _ moves turn) =
+                (Game _ moves legalMoves turn) =
                     model.game
             in
             case result of
@@ -282,26 +314,52 @@ update callbacks msg model =
                 Ok boardElement ->
                     ( { model | squareSize = Just (round <| boardElement.element.width / 8) }, Cmd.none )
 
+        StoreCopyOfBrowserBoard result ->
+            case result of
+                Err err ->
+                    ( model, Cmd.none )
+
+                Ok boardElement ->
+                    ( { model | browserBoard = Just boardElement }, Cmd.none )
+
+
+
+-- GAME LOGIC
+{-
+   Returns all squares that have pieces on them that are able to reinforce the move that is being considered.
+
+   Will first ensure that the move is legal before finding reinforcements.
+-}
+
+
+calculateReinforcingSquares : Position -> Position -> Game -> List Move
+calculateReinforcingSquares startingPosition currentPosition (Game pieces moves legalMoves turn) =
+    if Dict.member (toAlgebraic startingPosition ++ toAlgebraic currentPosition) legalMoves then
+        List.filter (\move -> movesToSquare currentPosition move && friendlyMoves turn move) moves
+
+    else
+        []
+
 
 
 -- GAME UPDATES
 
 
 removePiece : Position -> Game -> Game
-removePiece position (Game pieces moves turn) =
+removePiece position (Game pieces moves legalMoves turn) =
     Dict.remove position pieces
-        |> (\updatedPieces -> Game updatedPieces moves turn)
+        |> (\updatedPieces -> Game updatedPieces moves legalMoves turn)
 
 
 placePiece : Position -> Piece -> Game -> Game
-placePiece position piece (Game pieces moves turn) =
+placePiece position piece (Game pieces moves legalMoves turn) =
     Dict.insert position piece pieces
-        |> (\updatedPieces -> Game updatedPieces moves turn)
+        |> (\updatedPieces -> Game updatedPieces moves legalMoves turn)
 
 
 positionOnBoard : DragStuffInner -> { x : Float, y : Float, width : Float, height : Float } -> Turn -> Maybe Position
 positionOnBoard { x, y, dragState } element turn =
-    if x >= round element.x && x <= round (element.x + element.width) then
+    if positionIsOnBoard x y element then
         let
             xIntercept =
                 List.Extra.find (findIntercept element.x element.width x) (List.range 1 8)
@@ -342,16 +400,45 @@ reverseIfWhite (Turn color) idx =
         idx
 
 
+findCurrentPosition : DragStuffInner -> { x : Float, y : Float, width : Float, height : Float } -> Turn -> Maybe Position
+findCurrentPosition { dragState } element turn =
+    let
+        (Moving _ _ currentX currentY) =
+            dragState
+    in
+    if positionIsOnBoard currentX currentY element then
+        let
+            xIntercept =
+                List.Extra.find (findIntercept element.x element.width currentX) (List.range 1 8)
+                    |> Maybe.map (\v -> 9 - v)
+                    |> Maybe.map (reverseIfWhite turn)
+
+            yIntercept =
+                List.Extra.find (findIntercept element.y element.height currentY) (List.range 1 8)
+                    |> Maybe.map (reverseIfWhite turn)
+        in
+        Maybe.map2 Tuple.pair xIntercept yIntercept
+
+    else
+        Nothing
+
+
+positionIsOnBoard : Int -> Int -> { x : Float, y : Float, width : Float, height : Float } -> Bool
+positionIsOnBoard x y element =
+    (x >= round element.x && x <= round (element.x + element.width))
+        && (y >= round element.y && y <= round (element.y + element.height))
+
+
 
 -- VIEW BOARD
 
 
 view : Model -> Html Msg
-view { game, considering, playerColor, dragStuff, squareSize } =
+view { game, reinforcing, considering, playerColor, dragStuff, squareSize } =
     div [ class "container mx-auto" ]
-        [ viewTurn game playerColor
-        , viewBoard game considering playerColor dragStuff squareSize
-        , viewSettings playerColor
+        [ lazy2 viewTurn game playerColor
+        , lazy6 viewBoard game reinforcing considering playerColor dragStuff squareSize
+        , lazy viewSettings playerColor
         ]
 
 
@@ -375,7 +462,7 @@ radio value isChecked msg =
 
 
 viewTurn : Game -> Color -> Html Msg
-viewTurn (Game _ _ (Turn color)) playerColor =
+viewTurn (Game _ _ _ (Turn color)) playerColor =
     div [ class "container mx-auto text-2xl" ]
         [ if color == playerColor then
             text "Your turn"
@@ -385,10 +472,10 @@ viewTurn (Game _ _ (Turn color)) playerColor =
         ]
 
 
-viewBoard : Game -> Considering -> Color -> DragStuff -> Maybe Int -> Html Msg
-viewBoard ((Game _ _ (Turn turnColor)) as game) considering playerColor dragStuff squareSize =
+viewBoard : Game -> List Move -> Considering -> Color -> DragStuff -> Maybe Int -> Html Msg
+viewBoard ((Game _ _ _ (Turn turnColor)) as game) reinforcing considering playerColor dragStuff squareSize =
     div []
-        [ Prelude.maybe (span [] []) (viewGhostSquare game considering playerColor dragStuff) squareSize
+        [ Prelude.maybe (span [] []) (lazy5 viewGhostSquare game considering playerColor dragStuff) squareSize
         , div
             [ id "main-board"
             , classList
@@ -397,17 +484,17 @@ viewBoard ((Game _ _ (Turn turnColor)) as game) considering playerColor dragStuf
                 ]
             , onMouseLeave StopHovering
             ]
-            (List.concatMap (viewRow game considering playerColor) (List.range 1 8))
+            (List.concatMap (viewRow game reinforcing considering playerColor) (List.range 1 8))
         ]
 
 
-viewRow : Game -> Considering -> Color -> Int -> List (Html Msg)
-viewRow game considering playerColor row =
-    List.map (viewCell game considering playerColor row) (List.reverse (List.range 1 8))
+viewRow : Game -> List Move -> Considering -> Color -> Int -> List (Html Msg)
+viewRow game reinforcing considering playerColor row =
+    List.map (lazy6 viewCell game reinforcing considering playerColor row) (List.reverse (List.range 1 8))
 
 
-viewCell : Game -> Considering -> Color -> Int -> Int -> Html Msg
-viewCell game considering playerColor row column =
+viewCell : Game -> List Move -> Considering -> Color -> Int -> Int -> Html Msg
+viewCell game reinforcing considering playerColor row column =
     div
         [ classList
             [ ( "column-" ++ String.fromInt column, True )
@@ -416,11 +503,11 @@ viewCell game considering playerColor row column =
             , ( "rotated", playerColor == White )
             ]
         ]
-        [ viewSquare game considering playerColor ( column, row ) ]
+        [ lazy5 viewSquare game reinforcing considering playerColor ( column, row ) ]
 
 
 viewGhostSquare : Game -> Considering -> Color -> DragStuff -> Int -> Html Msg
-viewGhostSquare (Game pieces moves ((Turn turnColor) as turn)) considering playerColor dragStuff squareSize =
+viewGhostSquare (Game pieces moves legalMoves ((Turn turnColor) as turn)) considering playerColor dragStuff squareSize =
     case dragStuff of
         NoPieceInHand ->
             span [] []
@@ -463,14 +550,16 @@ getDragCoordinates { x, y, dragState } =
     ( x + endX - startX, y + endY - startY )
 
 
-viewSquare : Game -> Considering -> Color -> Position -> Html Msg
-viewSquare (Game pieces moves ((Turn turnColor) as turn)) considering playerColor position =
+viewSquare : Game -> List Move -> Considering -> Color -> Position -> Html Msg
+viewSquare (Game pieces moves legalMoves ((Turn turnColor) as turn)) reinforcing considering playerColor position =
     if turnColor == playerColor then
         case Dict.get position pieces of
             Just piece ->
                 div
                     [ classList
                         [ ( "w-full h-full m-0", True )
+                        , ( "bg-green-900", reinforces position reinforcing )
+                        , ( "transition", True )
                         ]
                     , style "cursor: grab"
                     , on "mousedown" (D.map4 StartDragging pageX pageY (D.succeed position) (D.succeed piece))
@@ -484,42 +573,14 @@ viewSquare (Game pieces moves ((Turn turnColor) as turn)) considering playerColo
                         ]
                     ]
                     []
-        --viewSquareDetails pieces
-        --    position
-        --    []
-        --    [ on "mousedown" (D.map3 StartDragging pageX pageY (D.succeed position))
-        --
-        --    --, on "mouseup" (D.map3 StopDragging pageX pageY)
-        --    ]
-        --case considering of
-        --    NotConsidering ->
-        --        viewSquareDetails pieces
-        --            position
-        --            []
-        --            [ onClick <| StartConsidering position
-        --            , onMouseOver <| StartHovering position
-        --            ]
-        --
-        --    HoveringOver consideringPosition ->
-        --        viewSquareDetails pieces
-        --            position
-        --            [ ( "bg-green-500", hasFriendlyMovesToPosition turn consideringPosition position moves )
-        --            ]
-        --            [ onClick <| StartConsidering position
-        --            , onMouseOver <| StartHovering position
-        --            ]
-        --
-        --    ConsideringMovingTo consideringPosition ->
-        --        viewSquareDetails pieces
-        --            position
-        --            [ ( "bg-green-500", hasFriendlyMovesToPosition turn consideringPosition position moves )
-        --            , ( "bg-yellow-500", hasEnemyMovesToPosition turn consideringPosition position moves )
-        --            ]
-        --            [ onClick <| handleConsideringMovingTo turn consideringPosition position moves
-        --            ]
 
     else
         viewSquareDetails pieces position [] []
+
+
+reinforces : Position -> List Move -> Bool
+reinforces position reinforcing =
+    List.any (\move -> move.squareFrom == toAlgebraic position) reinforcing
 
 
 viewSquareDetails : Dict Position Piece -> Position -> List ( String, Bool ) -> List (Attribute Msg) -> Html Msg
@@ -540,19 +601,6 @@ viewSquareDetails pieces position additionalClasses additionalEvents =
             Nothing ->
                 []
         )
-
-
-handleConsideringMovingTo : Turn -> Position -> Position -> List Move -> Msg
-handleConsideringMovingTo turn consideringMovingTo squareFrom availableMoves =
-    case friendlyMovesToPosition turn consideringMovingTo squareFrom availableMoves of
-        [] ->
-            StartHovering squareFrom
-
-        [ move ] ->
-            MakeMove move
-
-        arbitraryPromotionMove :: promotionMoves ->
-            MakeMove arbitraryPromotionMove
 
 
 shading : Int -> Int -> String
@@ -604,25 +652,20 @@ toAlgebraic ( column, row ) =
 -- SQUARE PROPERTIES
 
 
-hasFriendlyMovesToPosition : Turn -> Position -> Position -> List Move -> Bool
-hasFriendlyMovesToPosition turn squareTo squareFrom moves =
-    friendlyMovesToPosition turn squareTo squareFrom moves
-        |> List.isEmpty
-        |> not
-
-
-hasEnemyMovesToPosition : Turn -> Position -> Position -> List Move -> Bool
-hasEnemyMovesToPosition turn squareTo squareFrom moves =
-    movesToPosition squareTo squareFrom moves
-        |> List.filter (\move -> move.color /= turnToColor turn)
-        |> List.isEmpty
-        |> not
-
-
 friendlyMovesToPosition : Turn -> Position -> Position -> List Move -> List Move
 friendlyMovesToPosition turn squareTo squareFrom moves =
     movesToPosition squareTo squareFrom moves
         |> List.filter (\move -> move.color == turnToColor turn)
+
+
+friendlyMoves : Turn -> Move -> Bool
+friendlyMoves turn move =
+    move.color == turnToColor turn
+
+
+movesToSquare : Position -> Move -> Bool
+movesToSquare squareTo move =
+    move.squareTo == toAlgebraic squareTo
 
 
 
@@ -654,13 +697,32 @@ fromFen moves fen =
         [ rawBoard, rawTurn, c, d, e, f ] ->
             case ( D.decodeValue boardDecoder (E.string rawBoard), D.decodeValue turnDecoder (E.string rawTurn) ) of
                 ( Ok board, Ok turn ) ->
-                    Ok <| Game (Dict.fromList board) moves turn
+                    Ok <| Game (Dict.fromList board) moves (movesToDict moves) turn
 
                 _ ->
                     Err <| "Something went wrong"
 
         _ ->
             Err <| fen ++ " doesn't look right. FEN needs to have 6 pieces of info"
+
+
+
+-- TODO: List into custom codec
+
+
+movesToDict : List Move -> Dict MoveKey Move
+movesToDict moves =
+    List.map (\move -> ( moveKey move, move )) moves
+        |> Dict.fromList
+
+
+moveKey : Move -> MoveKey
+moveKey { squareFrom, squareTo } =
+    squareFrom ++ squareTo
+
+
+type alias MoveKey =
+    String
 
 
 turnDecoder : D.Decoder Turn
