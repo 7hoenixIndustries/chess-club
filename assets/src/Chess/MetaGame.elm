@@ -180,7 +180,7 @@ type Msg
 
 update : Callbacks msg -> Msg -> Model -> ( Model, Cmd msg )
 update callbacks msg model =
-    case Debug.log "msg" msg of
+    case msg of
         ChangeTeam color ->
             ( { model | playerColor = color }, Cmd.none )
 
