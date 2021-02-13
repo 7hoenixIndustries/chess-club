@@ -1,7 +1,7 @@
 defmodule ChessClubWeb.UserSocket do
   use Phoenix.Socket
   use Absinthe.Phoenix.Socket, schema: ChessClubWeb.Schema
-
+  alias ChessClub.UserManager.Guardian
 
   ## Channels
   # channel "room:*", ChessClubWeb.RoomChannel
@@ -50,6 +50,6 @@ defmodule ChessClubWeb.UserSocket do
 
   # REFACTOR: duplicated from lib/chess_club/user_manager/context.ex
   defp authorize(token) do
-    ChessClub.UserManager.Guardian.decode_and_verify(token, %{"typ" => "access"})
+    Guardian.decode_and_verify(token, %{"typ" => "access"})
   end
 end
