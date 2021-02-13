@@ -1,7 +1,6 @@
 defmodule ChessClubWeb.UserSocket do
   use Phoenix.Socket
   use Absinthe.Phoenix.Socket, schema: ChessClubWeb.Schema
-
   alias ChessClub.UserManager.Guardian
 
   ## Channels

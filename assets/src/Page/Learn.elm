@@ -9,7 +9,7 @@ module Page.Learn exposing
 
 import Api.Scalar exposing (Id)
 import Backend exposing (Backend)
-import Chess.Game as Chess
+import Chess.MetaGame as Chess
 import Graphql.Document
 import Graphql.Http
 import Html exposing (..)
@@ -19,6 +19,7 @@ import Html.Lazy exposing (..)
 import Js
 import Json.Decode
 import Page.Learn.Scenario as Scenario exposing (Move, scenarioSelection, subscribeToMoves)
+import Prelude
 import Session
 import Skeleton
 
@@ -60,6 +61,8 @@ init backend session =
             ( Model Nothing session Loading NotConnected Nothing
             , Cmd.batch
                 [ Scenario.getScenarios backend GotScenarios
+
+                --[ Scenario.getScenario backend (Api.Scalar.Id "1") GotScenario
                 ]
             )
 
@@ -90,7 +93,7 @@ update backend msg model =
                     ( model, Cmd.none )
 
                 Just chessModel ->
-                    stepChess model (Chess.update (Chess.Callbacks MakeMove) chessMsg chessModel)
+                    stepChess model (Chess.update (Chess.Callbacks MakeMove ChessMsg) chessMsg chessModel)
 
         CreateScenario ->
             ( model, Scenario.createScenario backend ScenarioCreated )
@@ -121,12 +124,19 @@ update backend msg model =
                     )
 
                 Ok scenario ->
+                    let
+                        ( chessModel, chessMsg ) =
+                            Chess.init scenario.availableMoves scenario.currentState ChessMsg
+                    in
                     -- TODO: chessModel is directly dependent on scenario. . . are we able to combine these somehow?
                     ( { model
                         | scenario = Just scenario
-                        , chessModel = Just <| Chess.init scenario.availableMoves scenario.currentState
+                        , chessModel = Just chessModel
                       }
-                    , Js.createSubscriptions (subscribeToMoves scenario.id |> Graphql.Document.serializeSubscription)
+                    , Cmd.batch
+                        [ Js.createSubscriptions (subscribeToMoves scenario.id |> Graphql.Document.serializeSubscription)
+                        , chessMsg
+                        ]
                     )
 
         MakeMove move ->
@@ -238,7 +248,7 @@ viewScenarios scenarios =
                 div []
                     ([ button [ onClick CreateScenario ] [ text "Create Scenario" ]
                      ]
-                        ++ List.map viewSelectScenario ss
+                        ++ List.map (lazy viewSelectScenario) ss
                     )
         ]
 
@@ -260,10 +270,10 @@ viewSelectScenario { id } =
 
 viewLearn : Maybe Scenario.Scenario -> Maybe Chess.Model -> SubscriptionStatus -> Html Msg
 viewLearn scenario chessModel subscriptionStatus =
-    div [ class "p-6 max-w-sm mx-auto bg-white rounded-xl shadow-md flex items-center space-x-4" ]
+    div [ class "container mx-auto flex items-center rounded-xl " ]
         [ case ( scenario, chessModel ) of
             ( Just s, Just c ) ->
-                viewScenario s c subscriptionStatus
+                lazy3 viewScenario s c subscriptionStatus
 
             ( Nothing, Just _ ) ->
                 div [] [ text "Scenario not loaded." ]
@@ -282,9 +292,9 @@ viewLearn scenario chessModel subscriptionStatus =
 
 viewScenario : Scenario.Scenario -> Chess.Model -> SubscriptionStatus -> Html Msg
 viewScenario scenario chessModel subscriptionStatus =
-    div [ class "container flex flex-col mx-auto px-4" ]
+    div [ class "container mx-auto" ]
         [ viewConnection subscriptionStatus
-        , Html.map ChessMsg (Chess.view chessModel)
+        , Html.map ChessMsg (lazy Chess.view chessModel)
         ]
 
 
@@ -307,4 +317,5 @@ subscriptions model =
         [ Js.gotSubscriptionData SubscriptionDataReceived
         , Js.socketStatusConnected (NewSubscriptionStatus Connected)
         , Js.socketStatusReconnecting (NewSubscriptionStatus Reconnecting)
+        , Prelude.maybe Sub.none (\chessModel -> Sub.map ChessMsg (Chess.subscriptions chessModel)) model.chessModel
         ]
