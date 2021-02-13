@@ -39,6 +39,10 @@ bishop =
     Chess.Piece Chess.Bishop team
 
 
+knight =
+    Chess.Piece Chess.Knight team
+
+
 opponentBishop =
     Chess.Piece Chess.Bishop opponentTeam
 
@@ -90,6 +94,10 @@ horizontalMovesFromD4 =
     , Position.b4
     , Position.a4
     ]
+
+
+knightMovesFromD4 =
+    [ Position.b3, Position.c2, Position.e2, Position.f3, Position.f5, Position.e6, Position.c6, Position.b5 ]
 
 
 pieceTypeFuzzer : Fuzzer PieceType
@@ -364,6 +372,45 @@ all =
                                         not
                                             (List.member s
                                                 (horizontalMovesFromD4 ++ diagonalMovesFromD4)
+                                            )
+                                    )
+                                    Position.all
+                        in
+                        Expect.equal []
+                            (List.filter
+                                (\pos -> Chess.canMoveTo pos game /= [])
+                                otherSquares
+                            )
+                , test "Knight movement" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.d4 knight
+
+                            game =
+                                Chess.init [ current ] team
+                        in
+                        Expect.true
+                            "Knows knight moves"
+                            (List.all
+                                (\pos -> Chess.canMoveTo pos game == [ Position.d4 ])
+                                knightMovesFromD4
+                            )
+                , test "Knight invalid moves" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.d4 knight
+
+                            game =
+                                Chess.init [ current ] team
+
+                            otherSquares =
+                                List.filter
+                                    (\s ->
+                                        not
+                                            (List.member s
+                                                knightMovesFromD4
                                             )
                                     )
                                     Position.all

@@ -22,8 +22,9 @@ type Team
 type PieceType
     = Monarch
     | Advisor
-    | Bishop
     | Rook
+    | Bishop
+    | Knight
 
 
 type Piece
@@ -95,7 +96,7 @@ isCheckmate ({ occupiedSquares, turn } as game) =
                     possibleMonarchVectors monarchLocation
 
                 monarchIsAbleToEscape =
-                    List.filter (\monarchMoveTo -> monarchCanMoveTo game monarchMoveTo occupiedSquares monarchLocation) monarchVectors
+                    List.filter (\monarchMoveTo -> canMoveToSingle game monarchMoveTo occupiedSquares monarchLocation turn (horizontalMovement ++ diagonalMovement)) monarchVectors
                         |> List.isEmpty
                         |> not
             in
@@ -231,6 +232,7 @@ pieceMovementToPath moveTo occupiedSquares occupied =
             []
 
         Just (Piece Monarch _) ->
+            -- TODO: What should happen here?
             []
 
         Just (Piece Advisor team) ->
@@ -242,10 +244,14 @@ pieceMovementToPath moveTo occupiedSquares occupied =
         Just (Piece Rook team) ->
             findPath moveTo occupiedSquares occupied team [] horizontalMovement
 
+        Just (Piece Knight team) ->
+            -- TODO: Is this correct?
+            []
+
 
 pieceCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> Team -> ( Int, Int ) -> Bool
 pieceCanMoveTo game ((Position squareToColumn squareToRow) as moveTo) occupiedSquares turn occupied =
-    -- TODO: dry plz <- Should be a (Result MoveError Bool)
+    -- TODO: Should be a (Result MoveError Bool)
     -- type MoveError = NoPieceOnSquare | OpponentsPiece | ResultsInCheck
     case Dict.get occupied occupiedSquares of
         Nothing ->
@@ -254,16 +260,19 @@ pieceCanMoveTo game ((Position squareToColumn squareToRow) as moveTo) occupiedSq
         Just piece ->
             case piece of
                 Piece Monarch team ->
-                    monarchCanMoveTo game moveTo occupiedSquares occupied
+                    canMoveToSingle game moveTo occupiedSquares occupied team (horizontalMovement ++ diagonalMovement)
 
                 Piece Advisor team ->
                     canMoveToRepeating game moveTo occupiedSquares occupied team (horizontalMovement ++ diagonalMovement)
 
+                Piece Rook team ->
+                    canMoveToRepeating game moveTo occupiedSquares occupied team horizontalMovement
+
                 Piece Bishop team ->
                     canMoveToRepeating game moveTo occupiedSquares occupied team diagonalMovement
 
-                Piece Rook team ->
-                    canMoveToRepeating game moveTo occupiedSquares occupied team horizontalMovement
+                Piece Knight team ->
+                    canMoveToSingle game moveTo occupiedSquares occupied team knightMovement
 
 
 doesNotLeadToCheck : ( Int, Int ) -> ( Int, Int ) -> Game -> Bool
@@ -286,10 +295,11 @@ canMoveTo moveTo ({ occupiedSquares, turn } as game) =
         |> List.map (\( x, y ) -> Position x y)
 
 
-monarchCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Bool
-monarchCanMoveTo game ((Position squareToColumn squareToRow) as moveTo) occupiedSquares occupied =
-    List.any (\vector -> checkMoveInDirection vector moveTo occupiedSquares occupied)
-        (horizontalMovement ++ diagonalMovement)
+canMoveToSingle : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> List ( Int, Int ) -> Bool
+canMoveToSingle ({ turn } as game) ((Position squareToColumn squareToRow) as moveTo) occupiedSquares occupied team vectors =
+    turn
+        == team
+        && List.any (\vector -> checkMoveInDirection vector moveTo occupiedSquares occupied) vectors
         && doesNotLeadToCheck occupied ( squareToColumn, squareToRow ) game
 
 
@@ -363,6 +373,18 @@ diagonalMovement =
     , northEast
     , southWest
     , southEast
+    ]
+
+
+knightMovement =
+    [ ( -2, -1 )
+    , ( -1, -2 )
+    , ( 1, -2 )
+    , ( 2, -1 )
+    , ( 2, 1 )
+    , ( 1, 2 )
+    , ( -1, 2 )
+    , ( -2, 1 )
     ]
 
 
