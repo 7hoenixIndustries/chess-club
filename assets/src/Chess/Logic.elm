@@ -41,6 +41,7 @@ type alias Game =
     -- Provide appropriate accessors / map functions.
     { occupiedSquares : Dict ( Int, Int ) Piece
     , turn : Team
+    , enpassant : Maybe Position
     }
 
 
@@ -65,9 +66,9 @@ asht (Occupied position piece) b =
     Dict.insert (positionToSquareKey position) piece b
 
 
-init : List Square -> Team -> Game
-init squares turn =
-    Game (List.foldl asht Dict.empty squares) turn
+init : List Square -> Team -> Maybe Position -> Game
+init squares turn enpassant =
+    Game (List.foldl asht Dict.empty squares) turn enpassant
 
 
 
