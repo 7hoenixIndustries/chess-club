@@ -11,6 +11,7 @@ module Chess.Logic exposing
 
 import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
+import Prelude
 import Set exposing (Set)
 
 
@@ -313,7 +314,7 @@ canMoveToSingle ({ turn } as game) ((Position squareToColumn squareToRow) as mov
 
 
 pawnCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
-pawnCanMoveTo game moveTo occupiedSquares occupied team =
+pawnCanMoveTo ({ enpassant } as game) moveTo occupiedSquares occupied team =
     let
         possibleMovements =
             case ( team, occupied ) of
@@ -344,8 +345,16 @@ pawnCanMoveTo game moveTo occupiedSquares occupied team =
 
         possibleAttacksForPawn =
             List.filter (possibleAttackForPawn occupiedSquares occupied) possibleAttacks
+
+        possibleEnPassant =
+            List.filter (mayUseEnpassant occupied enpassant) possibleAttacks
     in
-    canMoveToSingle game moveTo occupiedSquares occupied team (possibleMovementsForPawn ++ possibleAttacksForPawn)
+    canMoveToSingle game moveTo occupiedSquares occupied team (possibleMovementsForPawn ++ possibleAttacksForPawn ++ possibleEnPassant)
+
+
+mayUseEnpassant ( squareFromColumn, squareFromRow ) enpassant delta =
+    Maybe.map2 (==) enpassant (Position.applyDelta (Position squareFromColumn squareFromRow) delta)
+        |> Maybe.withDefault False
 
 
 possibleAttackForPawn : Dict ( Int, Int ) Piece -> ( Int, Int ) -> ( Int, Int ) -> Bool

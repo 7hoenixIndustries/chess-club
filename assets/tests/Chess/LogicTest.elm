@@ -481,6 +481,34 @@ all =
                                         (\pos -> Chess.canMoveTo pos game /= [])
                                         Position.all
                                     )
+                        , test "En passant is treated as a possible attack when considering." <|
+                            \() ->
+                                let
+                                    current =
+                                        Chess.Occupied Position.d4 pawn
+
+                                    game =
+                                        Chess.init [ current ] team (Just Position.e3)
+                                in
+                                Expect.equal [ Position.d3, Position.e3 ]
+                                    (List.filter
+                                        (\pos -> Chess.canMoveTo pos game /= [])
+                                        Position.all
+                                    )
+                        , test "En passant is ignored when not able to be reached." <|
+                            \() ->
+                                let
+                                    current =
+                                        Chess.Occupied Position.d5 pawn
+
+                                    game =
+                                        Chess.init [ current ] team (Just Position.e3)
+                                in
+                                Expect.equal [ Position.d4 ]
+                                    (List.filter
+                                        (\pos -> Chess.canMoveTo pos game /= [])
+                                        Position.all
+                                    )
                         ]
                     , describe "White" <|
                         [ test "On opening rank" <|
