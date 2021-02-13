@@ -43,6 +43,14 @@ knight =
     Chess.Piece Chess.Knight team
 
 
+pawn =
+    Chess.Piece Chess.Pawn team
+
+
+opponentPawn =
+    Chess.Piece Chess.Pawn opponentTeam
+
+
 opponentBishop =
     Chess.Piece Chess.Bishop opponentTeam
 
@@ -396,6 +404,20 @@ all =
                                 (\pos -> Chess.canMoveTo pos game == [ Position.d4 ])
                                 knightMovesFromD4
                             )
+                , test "Knight in a corner" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.a1 knight
+
+                            game =
+                                Chess.init [ current ] team
+                        in
+                        Expect.equal [ Position.b3, Position.c2 ]
+                            (List.filter
+                                (\pos -> Chess.canMoveTo pos game /= [])
+                                Position.all
+                            )
                 , test "Knight invalid moves" <|
                     \() ->
                         let
@@ -419,6 +441,74 @@ all =
                             (List.filter
                                 (\pos -> Chess.canMoveTo pos game /= [])
                                 otherSquares
+                            )
+                , test "Pawn movement - black" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.b7 pawn
+
+                            enemyThatIsAttackable =
+                                Chess.Occupied Position.c6 opponentBishop
+
+                            friendly =
+                                Chess.Occupied Position.a6 pawn
+
+                            opponentBlockingFriendly =
+                                Chess.Occupied Position.a5 opponentPawn
+
+                            game =
+                                Chess.init [ current, enemyThatIsAttackable, friendly, opponentBlockingFriendly ] team
+                        in
+                        Expect.equal [ Position.b6, Position.c6, Position.b5 ]
+                            (List.filter
+                                (\pos -> Chess.canMoveTo pos game /= [])
+                                Position.all
+                            )
+                , test "Pawn movement - not on opening rank" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.b6 pawn
+
+                            game =
+                                Chess.init [ current ] team
+                        in
+                        Expect.equal [ Position.b5 ]
+                            (List.filter
+                                (\pos -> Chess.canMoveTo pos game /= [])
+                                Position.all
+                            )
+                , test "Pawn movement - white" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.b2 opponentPawn
+
+                            enemyThatIsAttackable =
+                                Chess.Occupied Position.a3 bishop
+
+                            game =
+                                Chess.init [ current, enemyThatIsAttackable ] opponentTeam
+                        in
+                        Expect.equal [ Position.b4, Position.a3, Position.b3 ]
+                            (List.filter
+                                (\pos -> Chess.canMoveTo pos game /= [])
+                                Position.all
+                            )
+                , test "Pawn movement - white not on opening rank" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.b6 opponentPawn
+
+                            game =
+                                Chess.init [ current ] opponentTeam
+                        in
+                        Expect.equal [ Position.b7 ]
+                            (List.filter
+                                (\pos -> Chess.canMoveTo pos game /= [])
+                                Position.all
                             )
                 ]
             , describe "more pieces" <|

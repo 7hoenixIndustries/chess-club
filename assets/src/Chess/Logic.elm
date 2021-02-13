@@ -9,7 +9,7 @@ module Chess.Logic exposing
     , isCheckmate
     )
 
-import Chess.Position exposing (Position(..))
+import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
 import Set exposing (Set)
 
@@ -25,6 +25,7 @@ type PieceType
     | Rook
     | Bishop
     | Knight
+    | Pawn
 
 
 type Piece
@@ -248,6 +249,10 @@ pieceMovementToPath moveTo occupiedSquares occupied =
             -- TODO: Is this correct?
             []
 
+        Just (Piece Pawn team) ->
+            -- TODO: Is this correct?
+            []
+
 
 pieceCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> Team -> ( Int, Int ) -> Bool
 pieceCanMoveTo game ((Position squareToColumn squareToRow) as moveTo) occupiedSquares turn occupied =
@@ -274,6 +279,9 @@ pieceCanMoveTo game ((Position squareToColumn squareToRow) as moveTo) occupiedSq
                 Piece Knight team ->
                     canMoveToSingle game moveTo occupiedSquares occupied team knightMovement
 
+                Piece Pawn team ->
+                    pawnCanMoveTo game moveTo occupiedSquares occupied team
+
 
 doesNotLeadToCheck : ( Int, Int ) -> ( Int, Int ) -> Game -> Bool
 doesNotLeadToCheck squareFrom squareTo game =
@@ -299,8 +307,72 @@ canMoveToSingle : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) ->
 canMoveToSingle ({ turn } as game) ((Position squareToColumn squareToRow) as moveTo) occupiedSquares occupied team vectors =
     turn
         == team
-        && List.any (\vector -> checkMoveInDirection vector moveTo occupiedSquares occupied) vectors
+        && List.any (\vector -> checkMoveInDirection vector moveTo occupiedSquares occupied team) vectors
         && doesNotLeadToCheck occupied ( squareToColumn, squareToRow ) game
+
+
+pawnCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
+pawnCanMoveTo game moveTo occupiedSquares occupied team =
+    let
+        possibleMovements =
+            case ( team, occupied ) of
+                -- Pawns in starting locations may move forward two squares
+                ( Black, ( _, 7 ) ) ->
+                    [ ( 0, -1 ), ( 0, -2 ) ]
+
+                ( White, ( _, 2 ) ) ->
+                    [ ( 0, 1 ), ( 0, 2 ) ]
+
+                ( Black, _ ) ->
+                    [ ( 0, -1 ) ]
+
+                ( White, _ ) ->
+                    [ ( 0, 1 ) ]
+
+        possibleAttacks =
+            case team of
+                Black ->
+                    -- Pawns attack diagonally.
+                    [ ( 1, -1 ), ( -1, -1 ) ]
+
+                White ->
+                    [ ( 1, 1 ), ( -1, 1 ) ]
+
+        possibleMovementsForPawn =
+            List.filter (possibleMoveForPawn occupiedSquares occupied) possibleMovements
+
+        possibleAttacksForPawn =
+            List.filter (possibleAttackForPawn occupiedSquares occupied) possibleAttacks
+    in
+    canMoveToSingle game moveTo occupiedSquares occupied team (possibleMovementsForPawn ++ possibleAttacksForPawn)
+
+
+possibleAttackForPawn : Dict ( Int, Int ) Piece -> ( Int, Int ) -> ( Int, Int ) -> Bool
+possibleAttackForPawn occupiedSquares ( squareFromColumn, squareFromRow ) delta =
+    Position.applyDelta (Position squareFromColumn squareFromRow) delta
+        |> Maybe.andThen (\(Position col row) -> Dict.get ( col, row ) occupiedSquares)
+        |> isJust
+
+
+
+-- Pawns may not attack forwards.
+
+
+possibleMoveForPawn : Dict ( Int, Int ) Piece -> ( Int, Int ) -> ( Int, Int ) -> Bool
+possibleMoveForPawn occupiedSquares ( squareFromColumn, squareFromRow ) delta =
+    Position.applyDelta (Position squareFromColumn squareFromRow) delta
+        |> Maybe.andThen (\(Position col row) -> Dict.get ( col, row ) occupiedSquares)
+        |> (not << isJust)
+
+
+isJust : Maybe a -> Bool
+isJust maybe =
+    case maybe of
+        Just _ ->
+            True
+
+        Nothing ->
+            False
 
 
 canMoveToRepeating : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> List ( Int, Int ) -> Bool
@@ -420,20 +492,19 @@ northWest =
     ( 1, -1 )
 
 
-checkMoveInDirection : ( Int, Int ) -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Bool
-checkMoveInDirection ( columnDelta, rowDeltay ) (Position column row) occupiedSquares ( currentColumn, currentRow ) =
+checkMoveInDirection : ( Int, Int ) -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
+checkMoveInDirection ( columnDelta, rowDelta ) (Position column row) occupiedSquares ( currentColumn, currentRow ) team =
     let
-        nextColumn =
-            columnDelta + currentColumn
+        appliedColumn =
+            currentColumn + columnDelta
 
-        nextRow =
-            rowDeltay + currentRow
+        appliedRow =
+            currentRow + rowDelta
+
+        piece =
+            Dict.get ( appliedColumn, appliedRow ) occupiedSquares
     in
-    if nextColumn == 0 || nextRow == 0 || nextColumn == 9 || nextRow == 9 then
-        False
-
-    else
-        ( nextColumn, nextRow ) == ( column, row )
+    ( appliedColumn, appliedRow ) == ( column, row ) && not (occupiedByFriendly piece team)
 
 
 checkMoveInDirectionRepeating : ( Int, Int ) -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
