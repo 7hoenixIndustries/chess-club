@@ -7,6 +7,7 @@ module Chess.Logic exposing
     , findChecks
     , init
     , isCheckmate
+    , makeMove
     )
 
 import Chess.Position as Position exposing (Position(..))
@@ -47,15 +48,56 @@ type alias Game =
 
 
 makeMove : ( Int, Int ) -> ( Int, Int ) -> Game -> Game
-makeMove squareFrom squareTo ({ occupiedSquares, turn } as game) =
+makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant } as game) =
     case Dict.get squareFrom occupiedSquares of
         Nothing ->
             game
+
+        Just ((Piece Pawn team) as piece) ->
+            case enpassant of
+                Nothing ->
+                    Dict.remove squareFrom occupiedSquares
+                        |> Dict.insert squareTo piece
+                        |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
+
+                Just (Position col row) ->
+                    if ( col, row ) == squareTo then
+                        case findPawnThatMadeEnpassantMove game of
+                            Nothing ->
+                                -- This should be impossible.
+                                Dict.remove squareFrom occupiedSquares
+                                    |> Dict.insert squareTo piece
+                                    |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
+
+                            Just (Position enpassantColumn enpassantRow) ->
+                                Dict.remove squareFrom occupiedSquares
+                                    |> Dict.remove ( enpassantColumn, enpassantRow )
+                                    |> Dict.insert squareTo piece
+                                    |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
+
+                    else
+                        Dict.remove squareFrom occupiedSquares
+                            |> Dict.insert squareTo piece
+                            |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
 
         Just piece ->
             Dict.remove squareFrom occupiedSquares
                 |> Dict.insert squareTo piece
                 |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
+
+
+findPawnThatMadeEnpassantMove : Game -> Maybe Position
+findPawnThatMadeEnpassantMove { enpassant, turn } =
+    Maybe.map
+        (\(Position column row) ->
+            case turn of
+                Black ->
+                    Position column (row + 1)
+
+                White ->
+                    Position column (row - 1)
+        )
+        enpassant
 
 
 positionToSquareKey : Position -> ( Int, Int )

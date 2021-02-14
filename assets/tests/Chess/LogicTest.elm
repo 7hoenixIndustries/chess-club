@@ -2,6 +2,7 @@ module Chess.LogicTest exposing (all)
 
 import Chess.Logic as Chess exposing (Piece, PieceType(..), Square)
 import Chess.Position as Position exposing (Position(..))
+import Dict
 import Expect exposing (..)
 import Fuzz exposing (Fuzzer)
 import Test exposing (..)
@@ -226,6 +227,24 @@ all =
                         in
                         Expect.equal (List.sortBy position attackers) (List.sortBy position (Chess.findChecks game))
                 ]
+            ]
+        , describe "makeMove" <|
+            [ test "removes the enpassant when that is the move" <|
+                \() ->
+                    let
+                        current =
+                            Chess.Occupied Position.d4 pawn
+
+                        pawnThatHoppedTwoCreatingEnpassant =
+                            Chess.Occupied Position.e4 opponentPawn
+
+                        game =
+                            Chess.init [ current, pawnThatHoppedTwoCreatingEnpassant ] team (Just Position.e3)
+
+                        gameAfterEnpassantTake =
+                            Chess.makeMove ( 4, 4 ) ( 5, 3 ) game
+                    in
+                    Expect.equal [ ( ( 5, 3 ), pawn ) ] (Dict.toList gameAfterEnpassantTake.occupiedSquares)
             ]
         , describe "canMoveTo" <|
             [ describe "single piece" <|
