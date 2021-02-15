@@ -1,5 +1,6 @@
 module Chess.Logic exposing
-    ( Piece(..)
+    ( CastlingRight(..)
+    , Piece(..)
     , PieceType(..)
     , Square(..)
     , Team(..)
@@ -12,7 +13,6 @@ module Chess.Logic exposing
 
 import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
-import Prelude
 import Set exposing (Set)
 
 
@@ -44,7 +44,13 @@ type alias Game =
     { occupiedSquares : Dict ( Int, Int ) Piece
     , turn : Team
     , enpassant : Maybe Position
+    , castlingRights : List CastlingRight
     }
+
+
+type CastlingRight
+    = MonarchSide Team
+    | AdvisorSide Team
 
 
 makeMove : ( Int, Int ) -> ( Int, Int ) -> Game -> Game
@@ -109,9 +115,9 @@ asht (Occupied position piece) b =
     Dict.insert (positionToSquareKey position) piece b
 
 
-init : List Square -> Team -> Maybe Position -> Game
-init squares turn enpassant =
-    Game (List.foldl asht Dict.empty squares) turn enpassant
+init : List Square -> Team -> Maybe Position -> List CastlingRight -> Game
+init squares turn enpassant castlingRights =
+    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights
 
 
 
@@ -309,7 +315,7 @@ pieceCanMoveTo game ((Position squareToColumn squareToRow) as moveTo) occupiedSq
         Just piece ->
             case piece of
                 Piece Monarch team ->
-                    canMoveToSingle game moveTo occupiedSquares occupied team (horizontalMovement ++ diagonalMovement)
+                    monarchCanMoveTo game moveTo occupiedSquares occupied team
 
                 Piece Advisor team ->
                     canMoveToRepeating game moveTo occupiedSquares occupied team (horizontalMovement ++ diagonalMovement)
@@ -353,6 +359,33 @@ canMoveToSingle ({ turn } as game) ((Position squareToColumn squareToRow) as mov
         == team
         && List.any (\vector -> checkMoveInDirection vector moveTo occupiedSquares occupied team) vectors
         && doesNotLeadToCheck occupied ( squareToColumn, squareToRow ) game
+
+
+monarchCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
+monarchCanMoveTo ({ castlingRights } as game) moveTo occupiedSquares occupied team =
+    let
+        castlingMoves =
+            List.concatMap (findCastlingMove moveTo occupiedSquares occupied team) castlingRights
+    in
+    canMoveToSingle game moveTo occupiedSquares occupied team (horizontalMovement ++ diagonalMovement ++ castlingMoves)
+
+
+findCastlingMove : Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> CastlingRight -> List ( Int, Int )
+findCastlingMove moveTo occupiedSquares occupied team castlingRight =
+    case castlingRight of
+        AdvisorSide castlingRightTeam ->
+            if team == castlingRightTeam then
+                [ ( -2, 0 ) ]
+
+            else
+                []
+
+        MonarchSide castlingRightTeam ->
+            if team == castlingRightTeam then
+                [ ( 2, 0 ) ]
+
+            else
+                []
 
 
 pawnCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool

@@ -109,15 +109,6 @@ knightMovesFromD4 =
     [ Position.b3, Position.c2, Position.e2, Position.f3, Position.f5, Position.e6, Position.c6, Position.b5 ]
 
 
-pieceTypeFuzzer : Fuzzer PieceType
-pieceTypeFuzzer =
-    Fuzz.frequency
-        [ ( 1, Fuzz.constant Advisor )
-        , ( 1, Fuzz.constant Rook )
-        , ( 1, Fuzz.constant Bishop )
-        ]
-
-
 position : Square -> ( Int, Int )
 position (Chess.Occupied (Position px py) _) =
     ( px, py )
@@ -126,14 +117,7 @@ position (Chess.Occupied (Position px py) _) =
 all : Test
 all =
     describe "Chess"
-        [ describe "forcingMoves" <|
-            [ describe "considers checks to be forcing" <|
-                [ test "welp looks like we need check lol" <|
-                    \() ->
-                        Expect.true "basic" True
-                ]
-            ]
-        , describe "check mate" <|
+        [ describe "check mate" <|
             [ describe "knows if check is counterable (block, take, escape)" <|
                 [ test "no blocks, takes, or escape leads to checkmate" <|
                     \() ->
@@ -147,7 +131,7 @@ all =
                                 ]
 
                             game =
-                                Chess.init (attackers ++ [ current ]) team Nothing
+                                Chess.init (attackers ++ [ current ]) team Nothing []
                         in
                         Expect.true "Double rooks should be checkmating here." (Chess.isCheckmate game)
                 , test "if escapable then not checkmate" <|
@@ -161,7 +145,7 @@ all =
                                 ]
 
                             game =
-                                Chess.init (attackers ++ [ current ]) team Nothing
+                                Chess.init (attackers ++ [ current ]) team Nothing []
                         in
                         Expect.false "Monarch may move out of check." (Chess.isCheckmate game)
                 , test "if blockable then not checkmate" <|
@@ -179,7 +163,7 @@ all =
                                 Chess.Occupied Position.a2 rook
 
                             game =
-                                Chess.init (attackers ++ [ current, blocker ]) team Nothing
+                                Chess.init (attackers ++ [ current, blocker ]) team Nothing []
                         in
                         Expect.false "Rook should be able to block." (Chess.isCheckmate game)
                 , test "if capturable then not checkmate" <|
@@ -197,7 +181,7 @@ all =
                                 Chess.Occupied Position.f5 bishop
 
                             game =
-                                Chess.init (attackers ++ [ current, taker ]) team Nothing
+                                Chess.init (attackers ++ [ current, taker ]) team Nothing []
                         in
                         Expect.false "Bishop should be able to capture the attacking Rook." (Chess.isCheckmate game)
                 ]
@@ -223,13 +207,13 @@ all =
                                 Chess.Occupied Position.b3 rook
 
                             game =
-                                Chess.init (attackers ++ [ current, opponentThatCantAttack, sameTeam ]) team Nothing
+                                Chess.init (attackers ++ [ current, opponentThatCantAttack, sameTeam ]) team Nothing []
                         in
                         Expect.equal (List.sortBy position attackers) (List.sortBy position (Chess.findChecks game))
                 ]
             ]
         , describe "makeMove" <|
-            [ test "removes the enpassant when that is the move" <|
+            [ test "removes the enpassant pawn when that is the move" <|
                 \() ->
                     let
                         current =
@@ -239,7 +223,7 @@ all =
                             Chess.Occupied Position.e4 opponentPawn
 
                         game =
-                            Chess.init [ current, pawnThatHoppedTwoCreatingEnpassant ] team (Just Position.e3)
+                            Chess.init [ current, pawnThatHoppedTwoCreatingEnpassant ] team (Just Position.e3) []
 
                         gameAfterEnpassantTake =
                             Chess.makeMove ( 4, 4 ) ( 5, 3 ) game
@@ -248,61 +232,85 @@ all =
             ]
         , describe "canMoveTo" <|
             [ describe "single piece" <|
-                [ test "monarch movement" <|
-                    \() ->
-                        let
-                            current =
-                                Chess.Occupied Position.b2 monarch
+                [ describe "monarch movement" <|
+                    [ test "Valid" <|
+                        \() ->
+                            let
+                                current =
+                                    Chess.Occupied Position.b2 monarch
 
-                            game =
-                                Chess.init [ current ] team Nothing
+                                game =
+                                    Chess.init [ current ] team Nothing []
 
-                            validSquares =
-                                [ Position.a1
-                                , Position.a2
-                                , Position.a3
-                                , Position.b1
-                                , Position.b3
-                                , Position.c1
-                                , Position.c2
-                                , Position.c3
-                                ]
-                        in
-                        Expect.true
-                            "Knows monarch moves"
-                            (List.all
-                                (\pos -> Chess.canMoveTo pos game == [ Position.b2 ])
-                                validSquares
-                            )
-                , test "monarch invalid moves" <|
-                    \() ->
-                        let
-                            current =
-                                Chess.Occupied Position.b2 monarch
+                                validSquares =
+                                    [ Position.a1
+                                    , Position.a2
+                                    , Position.a3
+                                    , Position.b1
+                                    , Position.b3
+                                    , Position.c1
+                                    , Position.c2
+                                    , Position.c3
+                                    ]
+                            in
+                            Expect.true
+                                "Knows monarch moves"
+                                (List.all
+                                    (\pos -> Chess.canMoveTo pos game == [ Position.b2 ])
+                                    validSquares
+                                )
+                    , test "knows castling rights" <|
+                        \() ->
+                            let
+                                current =
+                                    Chess.Occupied Position.e8 monarch
 
-                            game =
-                                Chess.init [ current ] team Nothing
+                                game =
+                                    Chess.init [ current ] team Nothing [ Chess.AdvisorSide Chess.Black, Chess.MonarchSide Chess.Black ]
 
-                            validSquares =
-                                [ Position.a1
-                                , Position.a2
-                                , Position.a3
-                                , Position.b1
-                                , Position.b3
-                                , Position.c1
-                                , Position.c2
-                                , Position.c3
-                                ]
+                                castlingMoves =
+                                    [ Position.c8
+                                    , Position.g8
+                                    ]
+                            in
+                            Expect.equal castlingMoves
+                                (List.filter
+                                    (\pos -> Chess.canMoveTo pos game /= [])
+                                    castlingMoves
+                                )
 
-                            otherSquares =
-                                List.filter (\s -> not (List.member s validSquares)) Position.all
-                        in
-                        Expect.true
-                            "Not valid monarch movement"
-                            (List.all
-                                (\pos -> Chess.canMoveTo pos game == [])
-                                otherSquares
-                            )
+                    --, test "knows cannot castle if in check"
+                    --, test "knows cannot castle if would move through check"
+                    , test "invalid moves" <|
+                        \() ->
+                            let
+                                current =
+                                    Chess.Occupied Position.b2 monarch
+
+                                game =
+                                    Chess.init [ current ] team Nothing []
+
+                                validSquares =
+                                    [ Position.a1
+                                    , Position.a2
+                                    , Position.a3
+                                    , Position.b1
+                                    , Position.b3
+                                    , Position.c1
+                                    , Position.c2
+                                    , Position.c3
+                                    ]
+
+                                otherSquares =
+                                    List.filter (\s -> not (List.member s validSquares)) Position.all
+                            in
+                            Expect.true
+                                "Not valid monarch movement"
+                                (List.all
+                                    (\pos -> Chess.canMoveTo pos game == [])
+                                    otherSquares
+                                )
+                    ]
                 , test "bishop movement" <|
                     \() ->
                         let
@@ -310,7 +318,7 @@ all =
                                 Chess.Occupied Position.d4 bishop
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
                         in
                         Expect.true
                             "Knows bishop moves"
@@ -325,7 +333,7 @@ all =
                                 Chess.Occupied Position.d4 bishop
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
 
                             otherSquares =
                                 List.filter (\s -> not (List.member s diagonalMovesFromD4)) Position.all
@@ -343,7 +351,7 @@ all =
                                 Chess.Occupied Position.d4 rook
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
                         in
                         Expect.true
                             "Knows rook moves"
@@ -358,7 +366,7 @@ all =
                                 Chess.Occupied Position.d4 rook
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
 
                             otherSquares =
                                 List.filter (\s -> not (List.member s horizontalMovesFromD4)) Position.all
@@ -376,7 +384,7 @@ all =
                                 Chess.Occupied Position.d4 advisor
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
                         in
                         Expect.true
                             "Knows advisor moves"
@@ -391,7 +399,7 @@ all =
                                 Chess.Occupied Position.d4 advisor
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
 
                             otherSquares =
                                 List.filter
@@ -415,7 +423,7 @@ all =
                                 Chess.Occupied Position.d4 knight
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
                         in
                         Expect.true
                             "Knows knight moves"
@@ -430,7 +438,7 @@ all =
                                 Chess.Occupied Position.a1 knight
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
                         in
                         Expect.equal [ Position.b3, Position.c2 ]
                             (List.filter
@@ -444,7 +452,7 @@ all =
                                 Chess.Occupied Position.d4 knight
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
 
                             otherSquares =
                                 List.filter
@@ -479,7 +487,7 @@ all =
                                         Chess.Occupied Position.a5 opponentPawn
 
                                     game =
-                                        Chess.init [ current, enemyThatIsAttackable, friendly, opponentBlockingFriendly ] team Nothing
+                                        Chess.init [ current, enemyThatIsAttackable, friendly, opponentBlockingFriendly ] team Nothing []
                                 in
                                 Expect.equal [ Position.b6, Position.c6, Position.b5 ]
                                     (List.filter
@@ -493,7 +501,7 @@ all =
                                         Chess.Occupied Position.b6 pawn
 
                                     game =
-                                        Chess.init [ current ] team Nothing
+                                        Chess.init [ current ] team Nothing []
                                 in
                                 Expect.equal [ Position.b5 ]
                                     (List.filter
@@ -507,7 +515,7 @@ all =
                                         Chess.Occupied Position.d4 pawn
 
                                     game =
-                                        Chess.init [ current ] team (Just Position.e3)
+                                        Chess.init [ current ] team (Just Position.e3) []
                                 in
                                 Expect.equal [ Position.d3, Position.e3 ]
                                     (List.filter
@@ -521,7 +529,7 @@ all =
                                         Chess.Occupied Position.d5 pawn
 
                                     game =
-                                        Chess.init [ current ] team (Just Position.e3)
+                                        Chess.init [ current ] team (Just Position.e3) []
                                 in
                                 Expect.equal [ Position.d4 ]
                                     (List.filter
@@ -540,7 +548,7 @@ all =
                                         Chess.Occupied Position.a3 bishop
 
                                     game =
-                                        Chess.init [ current, enemyThatIsAttackable ] opponentTeam Nothing
+                                        Chess.init [ current, enemyThatIsAttackable ] opponentTeam Nothing []
                                 in
                                 Expect.equal [ Position.b4, Position.a3, Position.b3 ]
                                     (List.filter
@@ -554,7 +562,7 @@ all =
                                         Chess.Occupied Position.b6 opponentPawn
 
                                     game =
-                                        Chess.init [ current ] opponentTeam Nothing
+                                        Chess.init [ current ] opponentTeam Nothing []
                                 in
                                 Expect.equal [ Position.b7 ]
                                     (List.filter
@@ -578,7 +586,7 @@ all =
                                 Chess.Occupied pos opponentRook
 
                             game =
-                                Chess.init [ friendly Position.a2, current, friendly Position.b1, opponent Position.b2 ] team Nothing
+                                Chess.init [ friendly Position.a2, current, friendly Position.b1, opponent Position.b2 ] team Nothing []
                         in
                         Expect.equal [ Position.b2 ]
                             (List.filter
@@ -592,7 +600,7 @@ all =
                                 Chess.Occupied Position.a1 opponentAdvisor
 
                             game =
-                                Chess.init [ current ] team Nothing
+                                Chess.init [ current ] team Nothing []
                         in
                         Expect.equal [] (Chess.canMoveTo Position.a2 game)
                 , test "moves may not result in check" <|
@@ -608,7 +616,7 @@ all =
                                 Chess.Occupied Position.c1 opponentAdvisor
 
                             game =
-                                Chess.init [ protected, pinned, pinner ] team Nothing
+                                Chess.init [ protected, pinned, pinner ] team Nothing []
                         in
                         Expect.equal [] (Chess.canMoveTo Position.b3 game)
                 ]
