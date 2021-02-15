@@ -278,9 +278,78 @@ all =
                                     (\pos -> Chess.canMoveTo pos game /= [])
                                     castlingMoves
                                 )
+                    , test "knows cannot castle if in check" <|
+                        \() ->
+                            let
+                                current =
+                                    Chess.Occupied Position.e8 monarch
 
-                    --, test "knows cannot castle if in check"
-                    --, test "knows cannot castle if would move through check"
+                                checker =
+                                    Chess.Occupied Position.e6 opponentRook
+
+                                game =
+                                    Chess.init [ current, checker ] team Nothing [ Chess.AdvisorSide Chess.Black, Chess.MonarchSide Chess.Black ]
+
+                                castlingMoves =
+                                    [ Position.c8
+                                    , Position.g8
+                                    ]
+                            in
+                            Expect.equal []
+                                (List.filter
+                                    (\pos -> Chess.canMoveTo pos game /= [])
+                                    castlingMoves
+                                )
+                    , test "knows cannot castle if would move through check" <|
+                        \() ->
+                            let
+                                current =
+                                    Chess.Occupied Position.e8 monarch
+
+                                checkerAdvisorSide =
+                                    Chess.Occupied Position.f6 opponentRook
+
+                                checkerMonarchSide =
+                                    Chess.Occupied Position.c6 opponentRook
+
+                                game =
+                                    Chess.init [ current, checkerAdvisorSide, checkerMonarchSide ] team Nothing [ Chess.AdvisorSide Chess.Black, Chess.MonarchSide Chess.Black ]
+
+                                castlingMoves =
+                                    [ Position.c8
+                                    , Position.g8
+                                    ]
+                            in
+                            Expect.equal []
+                                (List.filter
+                                    (\pos -> Chess.canMoveTo pos game /= [])
+                                    castlingMoves
+                                )
+                    , test "knows cannot castle if blocked by piece" <|
+                        \() ->
+                            let
+                                current =
+                                    Chess.Occupied Position.e8 monarch
+
+                                blockedByFriendly =
+                                    Chess.Occupied Position.f8 bishop
+
+                                blockedByOpponent =
+                                    Chess.Occupied Position.d8 opponentBishop
+
+                                game =
+                                    Chess.init [ current, blockedByFriendly, blockedByOpponent ] team Nothing [ Chess.AdvisorSide Chess.Black, Chess.MonarchSide Chess.Black ]
+
+                                castlingMoves =
+                                    [ Position.c8
+                                    , Position.g8
+                                    ]
+                            in
+                            Expect.equal []
+                                (List.filter
+                                    (\pos -> Chess.canMoveTo pos game /= [])
+                                    castlingMoves
+                                )
                     , test "invalid moves" <|
                         \() ->
                             let

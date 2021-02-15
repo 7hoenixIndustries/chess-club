@@ -364,28 +364,52 @@ canMoveToSingle ({ turn } as game) ((Position squareToColumn squareToRow) as mov
 monarchCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
 monarchCanMoveTo ({ castlingRights } as game) moveTo occupiedSquares occupied team =
     let
+        monarchInCheck =
+            findChecks game
+                |> (not << List.isEmpty)
+
         castlingMoves =
-            List.concatMap (findCastlingMove moveTo occupiedSquares occupied team) castlingRights
+            if monarchInCheck then
+                []
+
+            else
+                List.concatMap (findCastlingMove game moveTo occupiedSquares occupied team) castlingRights
     in
     canMoveToSingle game moveTo occupiedSquares occupied team (horizontalMovement ++ diagonalMovement ++ castlingMoves)
 
 
-findCastlingMove : Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> CastlingRight -> List ( Int, Int )
-findCastlingMove moveTo occupiedSquares occupied team castlingRight =
+findCastlingMove : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> CastlingRight -> List ( Int, Int )
+findCastlingMove game moveTo occupiedSquares occupied team castlingRight =
+    -- NOTE: This implementation assumes that the monarch is in the typical starting location:
+    -- e8 for black, and e1 for white.
+    -- This implementation will NOT work if we ever choose to support Chess960.
+    let
+        pathIsNotBlocked path =
+            List.filter (\squareTo -> Dict.member squareTo occupiedSquares) (List.map Position.toRaw path)
+                |> List.isEmpty
+
+        monarchDoesntMoveThroughCheck path =
+            List.all (\squareTo -> doesNotLeadToCheck occupied squareTo game) (List.map Position.toRaw path)
+
+        isValidCastlingRight castlingRightTeam path offset =
+            if team == castlingRightTeam && pathIsNotBlocked path && monarchDoesntMoveThroughCheck path then
+                [ ( offset, 0 ) ]
+
+            else
+                []
+    in
     case castlingRight of
-        AdvisorSide castlingRightTeam ->
-            if team == castlingRightTeam then
-                [ ( -2, 0 ) ]
+        AdvisorSide Black ->
+            isValidCastlingRight Black [ Position.d8, Position.c8 ] -2
 
-            else
-                []
+        AdvisorSide White ->
+            isValidCastlingRight White [ Position.f1, Position.g1 ] -2
 
-        MonarchSide castlingRightTeam ->
-            if team == castlingRightTeam then
-                [ ( 2, 0 ) ]
+        MonarchSide Black ->
+            isValidCastlingRight Black [ Position.f8, Position.g8 ] 2
 
-            else
-                []
+        MonarchSide White ->
+            isValidCastlingRight White [ Position.d1, Position.c1 ] 2
 
 
 pawnCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
