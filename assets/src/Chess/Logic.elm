@@ -53,8 +53,21 @@ type CastlingRight
     | AdvisorSide Team
 
 
+
+{-
+
+   Make a move on the board.
+
+   NOTE: This function does NOT apply any restrictive game logic. It assumes that whatever is being sent is valid.
+
+   To ensure that you do not end up in a bad state you should first call: `canMoveTo` to find out validMoves and only then
+   call this function to execute one of the moves returned.
+
+-}
+
+
 makeMove : ( Int, Int ) -> ( Int, Int ) -> Game -> Game
-makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant } as game) =
+makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant, castlingRights } as game) =
     case Dict.get squareFrom occupiedSquares of
         Nothing ->
             game
@@ -64,7 +77,7 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant } as game) =
                 Nothing ->
                     Dict.remove squareFrom occupiedSquares
                         |> Dict.insert squareTo piece
-                        |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
+                        |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn castlingRights })
 
                 Just (Position col row) ->
                     if ( col, row ) == squareTo then
@@ -73,7 +86,7 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant } as game) =
                                 -- This should be impossible.
                                 Dict.remove squareFrom occupiedSquares
                                     |> Dict.insert squareTo piece
-                                    |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
+                                    |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn castlingRights })
 
                             Just (Position enpassantColumn enpassantRow) ->
                                 Dict.remove squareFrom occupiedSquares
@@ -84,12 +97,116 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant } as game) =
                     else
                         Dict.remove squareFrom occupiedSquares
                             |> Dict.insert squareTo piece
-                            |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
+                            |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn castlingRights })
+
+        Just ((Piece Monarch team) as piece) ->
+            let
+                updatedPieces =
+                    case ( squareFrom, squareTo ) of
+                        -- NOTE: Elm doesn't appear to allow us to pattern match on our nice Position.e8 style types :(
+                        -- Monarch starting square to castling square
+                        -- e8       g8
+                        ( ( 5, 8 ), ( 7, 8 ) ) ->
+                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting = ( 8, 8 ), rookEnding = ( 6, 8 ) }
+
+                        -- e8       c8
+                        ( ( 5, 8 ), ( 3, 8 ) ) ->
+                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting = ( 1, 8 ), rookEnding = ( 4, 8 ) }
+
+                        -- e1       c1
+                        ( ( 5, 1 ), ( 3, 1 ) ) ->
+                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting = ( 1, 1 ), rookEnding = ( 4, 1 ) }
+
+                        -- e1       g1
+                        ( ( 5, 1 ), ( 7, 1 ) ) ->
+                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting = ( 8, 1 ), rookEnding = ( 6, 1 ) }
+
+                        ( _, _ ) ->
+                            Dict.remove squareFrom occupiedSquares
+                                |> Dict.insert squareTo piece
+            in
+            { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn (clearCastlingRights turn game.castlingRights) }
+
+        Just ((Piece Rook team) as piece) ->
+            let
+                updatedCastlingRights =
+                    case ( squareFrom, team ) of
+                        ( ( 8, 8 ), Black ) ->
+                            List.filter ((==) (MonarchSide Black)) castlingRights
+
+                        ( ( 1, 8 ), Black ) ->
+                            List.filter ((==) (AdvisorSide Black)) castlingRights
+
+                        ( ( 8, 1 ), White ) ->
+                            List.filter ((==) (MonarchSide White)) castlingRights
+
+                        ( ( 1, 1 ), White ) ->
+                            List.filter ((==) (AdvisorSide White)) castlingRights
+
+                        ( _, _ ) ->
+                            castlingRights
+            in
+            Dict.remove squareFrom occupiedSquares
+                |> Dict.insert squareTo piece
+                |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn updatedCastlingRights })
 
         Just piece ->
             Dict.remove squareFrom occupiedSquares
                 |> Dict.insert squareTo piece
-                |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn })
+                |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn castlingRights })
+
+
+castlingRightsOnCapture squareTo team castlingRights =
+    case ( squareTo, opponentTurn team ) of
+        ( ( 8, 8 ), Black ) ->
+            List.filter ((==) (MonarchSide Black)) castlingRights
+
+        ( ( 1, 8 ), Black ) ->
+            List.filter ((==) (AdvisorSide Black)) castlingRights
+
+        ( ( 8, 1 ), White ) ->
+            List.filter ((==) (MonarchSide White)) castlingRights
+
+        ( ( 1, 1 ), White ) ->
+            List.filter ((==) (AdvisorSide White)) castlingRights
+
+        ( _, _ ) ->
+            castlingRights
+
+
+hasCastlingRights : Team -> List CastlingRight -> Bool
+hasCastlingRights team castlingRights =
+    List.any
+        (\castlingRight ->
+            case castlingRight of
+                AdvisorSide castlingRightTeam ->
+                    castlingRightTeam == team
+
+                MonarchSide castlingRightTeam ->
+                    castlingRightTeam == team
+        )
+        castlingRights
+
+
+makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting, rookEnding } =
+    Dict.remove squareFrom occupiedSquares
+        |> Dict.insert squareTo piece
+        |> Dict.remove rookStarting
+        |> Dict.insert rookEnding (Piece Rook team)
+
+
+clearCastlingRights : Team -> List CastlingRight -> List CastlingRight
+clearCastlingRights team castlingRights =
+    List.filter
+        (\castlingRight ->
+            case castlingRight of
+                AdvisorSide castlingRightTeam ->
+                    castlingRightTeam == team
+
+                MonarchSide castlingRightTeam ->
+                    castlingRightTeam == team
+        )
+        castlingRights
 
 
 findPawnThatMadeEnpassantMove : Game -> Maybe Position

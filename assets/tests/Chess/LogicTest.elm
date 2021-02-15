@@ -20,6 +20,10 @@ monarch =
     Chess.Piece Chess.Monarch team
 
 
+opponentMonarch =
+    Chess.Piece Chess.Monarch opponentTeam
+
+
 advisor =
     Chess.Piece Chess.Advisor team
 
@@ -229,6 +233,145 @@ all =
                             Chess.makeMove ( 4, 4 ) ( 5, 3 ) game
                     in
                     Expect.equal [ ( ( 5, 3 ), pawn ) ] (Dict.toList gameAfterEnpassantTake.occupiedSquares)
+            , describe "castling moves" <|
+                [ test "moves the Rook to the other side of the Monarch when castling - Black MonarchSide" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.e8 monarch
+
+                            rookForCastle =
+                                Chess.Occupied Position.h8 rook
+
+                            game =
+                                Chess.init [ current, rookForCastle ] team Nothing [ Chess.MonarchSide Chess.Black ]
+
+                            gameAfterCastle =
+                                Chess.makeMove (Position.toRaw Position.e8) (Position.toRaw Position.g8) game
+                        in
+                        Expect.equal
+                            [ ( Position.toRaw Position.f8, rook )
+                            , ( Position.toRaw Position.g8, monarch )
+                            ]
+                            (Dict.toList gameAfterCastle.occupiedSquares)
+                , test "moves the Rook to the other side of the Monarch when castling - Black AdvisorSide" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.e8 monarch
+
+                            rookForCastle =
+                                Chess.Occupied Position.a8 rook
+
+                            game =
+                                Chess.init [ current, rookForCastle ] team Nothing [ Chess.AdvisorSide Chess.Black ]
+
+                            gameAfterCastle =
+                                Chess.makeMove (Position.toRaw Position.e8) (Position.toRaw Position.c8) game
+                        in
+                        Expect.equal
+                            [ ( Position.toRaw Position.c8, monarch )
+                            , ( Position.toRaw Position.d8, rook )
+                            ]
+                            (Dict.toList gameAfterCastle.occupiedSquares)
+                , test "moves the Rook to the other side of the Monarch when castling - White MonarchSide" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.e1 opponentMonarch
+
+                            rookForCastle =
+                                Chess.Occupied Position.h1 opponentRook
+
+                            game =
+                                Chess.init [ current, rookForCastle ] opponentTeam Nothing [ Chess.MonarchSide Chess.White ]
+
+                            gameAfterCastle =
+                                Chess.makeMove (Position.toRaw Position.e1) (Position.toRaw Position.g1) game
+                        in
+                        Expect.equal
+                            [ ( Position.toRaw Position.f1, opponentRook )
+                            , ( Position.toRaw Position.g1, opponentMonarch )
+                            ]
+                            (Dict.toList gameAfterCastle.occupiedSquares)
+                , test "moves the Rook to the other side of the Monarch when castling - White AdvisorSide" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.e1 opponentMonarch
+
+                            rookForCastle =
+                                Chess.Occupied Position.a1 opponentRook
+
+                            game =
+                                Chess.init [ current, rookForCastle ] opponentTeam Nothing [ Chess.AdvisorSide Chess.White ]
+
+                            gameAfterCastle =
+                                Chess.makeMove (Position.toRaw Position.e1) (Position.toRaw Position.c1) game
+                        in
+                        Expect.equal
+                            [ ( Position.toRaw Position.c1, opponentMonarch )
+                            , ( Position.toRaw Position.d1, opponentRook )
+                            ]
+                            (Dict.toList gameAfterCastle.occupiedSquares)
+                , test "clears out castling rights if a move is made by the monarch" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.e1 monarch
+
+                            game =
+                                Chess.init [ current ] team Nothing [ Chess.AdvisorSide Chess.Black, Chess.AdvisorSide Chess.White ]
+
+                            gameAfterCastle =
+                                Chess.makeMove (Position.toRaw Position.e1) (Position.toRaw Position.e2) game
+                        in
+                        Expect.equal
+                            [ Chess.AdvisorSide Chess.Black
+                            ]
+                            gameAfterCastle.castlingRights
+                , test "clears out castling rights for that side only if a move is made by a rook" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.e8 monarch
+
+                            rookForCastle =
+                                Chess.Occupied Position.a8 rook
+
+                            game =
+                                Chess.init [ current, rookForCastle ] team Nothing [ Chess.AdvisorSide Chess.Black, Chess.MonarchSide Chess.Black ]
+
+                            gameAfterCastle =
+                                Chess.makeMove (Position.toRaw Position.a8) (Position.toRaw Position.a7) game
+                        in
+                        Expect.equal
+                            [ Chess.AdvisorSide Chess.Black
+                            ]
+                            gameAfterCastle.castlingRights
+                , test "clears out castling rights for that side only if a rook is captured" <|
+                    \() ->
+                        let
+                            current =
+                                Chess.Occupied Position.e8 monarch
+
+                            rookForCastle =
+                                Chess.Occupied Position.a8 rook
+
+                            capturer =
+                                Chess.Occupied Position.a6 opponentRook
+
+                            game =
+                                Chess.init [ current, rookForCastle, capturer ] opponentTeam Nothing [ Chess.AdvisorSide Chess.Black, Chess.MonarchSide Chess.Black ]
+
+                            gameAfterCastle =
+                                Chess.makeMove (Position.toRaw Position.a6) (Position.toRaw Position.a8) game
+                        in
+                        Expect.equal
+                            [ Chess.AdvisorSide Chess.Black
+                            ]
+                            gameAfterCastle.castlingRights
+                ]
             ]
         , describe "canMoveTo" <|
             [ describe "single piece" <|
