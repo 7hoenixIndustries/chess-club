@@ -17,47 +17,47 @@ opponentTeam =
 
 
 monarch =
-    Chess.Piece Chess.Monarch team
+    Chess.Piece team Chess.Monarch
 
 
 opponentMonarch =
-    Chess.Piece Chess.Monarch opponentTeam
+    Chess.Piece opponentTeam Chess.Monarch
 
 
 advisor =
-    Chess.Piece Chess.Advisor team
+    Chess.Piece team Chess.Advisor
 
 
 opponentAdvisor =
-    Chess.Piece Chess.Advisor opponentTeam
+    Chess.Piece opponentTeam Chess.Advisor
 
 
 rook =
-    Chess.Piece Chess.Rook team
+    Chess.Piece team Chess.Rook
 
 
 opponentRook =
-    Chess.Piece Chess.Rook opponentTeam
+    Chess.Piece opponentTeam Chess.Rook
 
 
 bishop =
-    Chess.Piece Chess.Bishop team
+    Chess.Piece team Chess.Bishop
 
 
 knight =
-    Chess.Piece Chess.Knight team
+    Chess.Piece team Chess.Knight
 
 
 pawn =
-    Chess.Piece Chess.Pawn team
+    Chess.Piece team Chess.Pawn
 
 
 opponentPawn =
-    Chess.Piece Chess.Pawn opponentTeam
+    Chess.Piece opponentTeam Chess.Pawn
 
 
 opponentBishop =
-    Chess.Piece Chess.Bishop opponentTeam
+    Chess.Piece opponentTeam Chess.Bishop
 
 
 diagonalMovesFromD4 =

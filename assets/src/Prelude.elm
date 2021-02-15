@@ -1,4 +1,7 @@
-module Prelude exposing (Segment(..), maybe)
+module Prelude exposing (Segment(..), dataId, maybe)
+
+import Html exposing (Attribute)
+import Html.Attributes exposing (attribute)
 
 
 type Segment
@@ -14,3 +17,8 @@ maybe default f x =
 
         Just a ->
             f a
+
+
+dataId : String -> String -> Attribute msg
+dataId tag value =
+    attribute ("data-" ++ tag) value

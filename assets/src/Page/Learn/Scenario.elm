@@ -1,6 +1,7 @@
 module Page.Learn.Scenario exposing
     ( Move
     , Scenario
+    , Scenario2(..)
     , ScenarioSeed
     , createScenario
     , getScenario
@@ -26,6 +27,11 @@ import Graphql.SelectionSet as SelectionSet exposing (SelectionSet, list, with)
 
 
 -- SCENARIO
+
+
+type Scenario2
+    = Loaded Scenario
+    | Seed ScenarioSeed
 
 
 type alias Scenario =

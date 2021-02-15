@@ -1,4 +1,4 @@
-module Chess.Position exposing (Position(..), a1, a2, a3, a4, a5, a6, a7, a8, all, applyDelta, b1, b2, b3, b4, b5, b6, b7, b8, c1, c2, c3, c4, c5, c6, c7, c8, d1, d2, d3, d4, d5, d6, d7, d8, e1, e2, e3, e4, e5, e6, e7, e8, f1, f2, f3, f4, f5, f6, f7, f8, g1, g2, g3, g4, g5, g6, g7, g8, h1, h2, h3, h4, h5, h6, h7, h8, toRaw)
+module Chess.Position exposing (Position(..), a1, a2, a3, a4, a5, a6, a7, a8, all, applyDelta, b1, b2, b3, b4, b5, b6, b7, b8, c1, c2, c3, c4, c5, c6, c7, c8, d1, d2, d3, d4, d5, d6, d7, d8, decode, e1, e2, e3, e4, e5, e6, e7, e8, f1, f2, f3, f4, f5, f6, f7, f8, g1, g2, g3, g4, g5, g6, g7, g8, h1, h2, h3, h4, h5, h6, h7, h8, toAlgebraic, toRaw)
 
 {- Position
 
@@ -11,6 +11,8 @@ module Chess.Position exposing (Position(..), a1, a2, a3, a4, a5, a6, a7, a8, al
    mapBoth : (a -> b -> (Int, Int)) -> Position -> Position
 
 -}
+
+import Json.Decode as D
 
 
 type Position
@@ -67,6 +69,114 @@ applyDelta (Position column row) ( columnDelta, rowDelta ) =
 toRaw : Position -> ( Int, Int )
 toRaw (Position column row) =
     ( column, row )
+
+
+getLetter : Int -> String
+getLetter i =
+    case i of
+        1 ->
+            "a"
+
+        2 ->
+            "b"
+
+        3 ->
+            "c"
+
+        4 ->
+            "d"
+
+        5 ->
+            "e"
+
+        6 ->
+            "f"
+
+        7 ->
+            "g"
+
+        8 ->
+            "h"
+
+        _ ->
+            "woof"
+
+
+toAlgebraic : Position -> String
+toAlgebraic (Position column row) =
+    getLetter column ++ String.fromInt row
+
+
+decode : String -> D.Decoder Position
+decode t =
+    case String.split "" t of
+        column :: row :: [] ->
+            D.map2 Position (fromLetter column) (parseRow row)
+
+        _ ->
+            D.fail <| (t ++ " is not a valid position")
+
+
+parseRow : String -> D.Decoder Int
+parseRow row =
+    case row of
+        "1" ->
+            D.succeed 1
+
+        "2" ->
+            D.succeed 2
+
+        "3" ->
+            D.succeed 3
+
+        "4" ->
+            D.succeed 4
+
+        "5" ->
+            D.succeed 5
+
+        "6" ->
+            D.succeed 6
+
+        "7" ->
+            D.succeed 7
+
+        "8" ->
+            D.succeed 8
+
+        bad ->
+            D.fail <| bad ++ " is not a valid row"
+
+
+fromLetter : String -> D.Decoder Int
+fromLetter column =
+    case column of
+        "a" ->
+            D.succeed 1
+
+        "b" ->
+            D.succeed 2
+
+        "c" ->
+            D.succeed 3
+
+        "d" ->
+            D.succeed 4
+
+        "e" ->
+            D.succeed 5
+
+        "f" ->
+            D.succeed 6
+
+        "g" ->
+            D.succeed 7
+
+        "h" ->
+            D.succeed 8
+
+        bad ->
+            D.fail <| bad ++ " not valid colmunm"
 
 
 all : List Position

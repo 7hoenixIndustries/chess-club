@@ -1,11 +1,14 @@
 module Chess.Logic exposing
     ( CastlingRight(..)
+    , Game
     , Piece(..)
     , PieceType(..)
     , Square(..)
     , Team(..)
+    , blankBoard
     , canMoveTo
     , findChecks
+    , fromFen
     , init
     , isCheckmate
     , makeMove
@@ -13,7 +16,14 @@ module Chess.Logic exposing
 
 import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
+import Json.Decode as D
+import Json.Encode as E
+import Page.Learn.Scenario exposing (Move)
 import Set exposing (Set)
+
+
+type Turn
+    = Turn Team
 
 
 type Team
@@ -31,7 +41,7 @@ type PieceType
 
 
 type Piece
-    = Piece PieceType Team
+    = Piece Team PieceType
 
 
 type Square
@@ -45,6 +55,7 @@ type alias Game =
     , turn : Team
     , enpassant : Maybe Position
     , castlingRights : List CastlingRight
+    , moves : List Move
     }
 
 
@@ -72,7 +83,7 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant, castlingRights
         Nothing ->
             game
 
-        Just ((Piece Pawn team) as piece) ->
+        Just ((Piece team Pawn) as piece) ->
             case enpassant of
                 Nothing ->
                     Dict.remove squareFrom occupiedSquares
@@ -99,7 +110,7 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant, castlingRights
                             |> Dict.insert squareTo piece
                             |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn castlingRights })
 
-        Just ((Piece Monarch team) as piece) ->
+        Just ((Piece team Monarch) as piece) ->
             let
                 updatedPieces =
                     case ( squareFrom, squareTo ) of
@@ -127,7 +138,7 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant, castlingRights
             in
             { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn (clearCastlingRights turn game.castlingRights) }
 
-        Just ((Piece Rook team) as piece) ->
+        Just ((Piece team Rook) as piece) ->
             let
                 updatedCastlingRights =
                     case ( squareFrom, team ) of
@@ -192,7 +203,7 @@ makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rook
     Dict.remove squareFrom occupiedSquares
         |> Dict.insert squareTo piece
         |> Dict.remove rookStarting
-        |> Dict.insert rookEnding (Piece Rook team)
+        |> Dict.insert rookEnding (Piece team Rook)
 
 
 clearCastlingRights : Team -> List CastlingRight -> List CastlingRight
@@ -234,7 +245,12 @@ asht (Occupied position piece) b =
 
 init : List Square -> Team -> Maybe Position -> List CastlingRight -> Game
 init squares turn enpassant castlingRights =
-    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights
+    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights []
+
+
+blankBoard : Game
+blankBoard =
+    Game Dict.empty Black Nothing [] []
 
 
 
@@ -258,7 +274,7 @@ isCheckmate ({ occupiedSquares, turn } as game) =
                     List.filter (sameTeam turn) occupiedAsList
                         |> List.filter isMonarch
                         |> List.head
-                        |> Maybe.withDefault ( ( 1, 1 ), Piece Monarch turn )
+                        |> Maybe.withDefault ( ( 1, 1 ), Piece turn Monarch )
 
                 monarchVectors =
                     possibleMonarchVectors monarchLocation
@@ -347,7 +363,7 @@ findChecks ({ occupiedSquares, turn } as game) =
             List.filter (sameTeam turn) occupiedAsList
                 |> List.filter isMonarch
                 |> List.head
-                |> Maybe.withDefault ( ( 1, 1 ), Piece Monarch turn )
+                |> Maybe.withDefault ( ( 1, 1 ), Piece turn Monarch )
 
         enemyTeam =
             List.filter (opponentTeam turn) occupiedAsList
@@ -370,7 +386,7 @@ opponentTurn turn =
 
 
 isMonarch : ( a, Piece ) -> Bool
-isMonarch ( _, Piece pieceType _ ) =
+isMonarch ( _, Piece _ pieceType ) =
     case pieceType of
         Monarch ->
             True
@@ -380,12 +396,12 @@ isMonarch ( _, Piece pieceType _ ) =
 
 
 sameTeam : Team -> ( a, Piece ) -> Bool
-sameTeam turn ( _, Piece _ pieceColor ) =
+sameTeam turn ( _, Piece pieceColor _ ) =
     pieceColor == turn
 
 
 opponentTeam : Team -> ( a, Piece ) -> Bool
-opponentTeam turn ( _, Piece _ pieceColor ) =
+opponentTeam turn ( _, Piece pieceColor _ ) =
     pieceColor /= turn
 
 
@@ -399,24 +415,24 @@ pieceMovementToPath moveTo occupiedSquares occupied =
         Nothing ->
             []
 
-        Just (Piece Monarch _) ->
+        Just (Piece _ Monarch) ->
             -- TODO: What should happen here?
             []
 
-        Just (Piece Advisor team) ->
+        Just (Piece team Advisor) ->
             findPath moveTo occupiedSquares occupied team [] (horizontalMovement ++ diagonalMovement)
 
-        Just (Piece Bishop team) ->
+        Just (Piece team Bishop) ->
             findPath moveTo occupiedSquares occupied team [] diagonalMovement
 
-        Just (Piece Rook team) ->
+        Just (Piece team Rook) ->
             findPath moveTo occupiedSquares occupied team [] horizontalMovement
 
-        Just (Piece Knight team) ->
+        Just (Piece team Knight) ->
             -- TODO: Is this correct?
             []
 
-        Just (Piece Pawn team) ->
+        Just (Piece team Pawn) ->
             -- TODO: Is this correct?
             []
 
@@ -431,22 +447,22 @@ pieceCanMoveTo game ((Position squareToColumn squareToRow) as moveTo) occupiedSq
 
         Just piece ->
             case piece of
-                Piece Monarch team ->
+                Piece team Monarch ->
                     monarchCanMoveTo game moveTo occupiedSquares occupied team
 
-                Piece Advisor team ->
+                Piece team Advisor ->
                     canMoveToRepeating game moveTo occupiedSquares occupied team (horizontalMovement ++ diagonalMovement)
 
-                Piece Rook team ->
+                Piece team Rook ->
                     canMoveToRepeating game moveTo occupiedSquares occupied team horizontalMovement
 
-                Piece Bishop team ->
+                Piece team Bishop ->
                     canMoveToRepeating game moveTo occupiedSquares occupied team diagonalMovement
 
-                Piece Knight team ->
+                Piece team Knight ->
                     canMoveToSingle game moveTo occupiedSquares occupied team knightMovement
 
-                Piece Pawn team ->
+                Piece team Pawn ->
                     pawnCanMoveTo game moveTo occupiedSquares occupied team
 
 
@@ -774,5 +790,232 @@ occupiedByFriendly piece team =
         Nothing ->
             False
 
-        Just (Piece _ t) ->
+        Just (Piece t _) ->
             t == team
+
+
+
+-- SERIALIZATION
+
+
+fromFen : List Move -> String -> Result String Game
+fromFen moves fen =
+    case String.split " " fen of
+        [ rawBoard, rawTurn, rawEnpassant, rawCastlingRights, e, f ] ->
+            Result.map4
+                (\board turn enpassant castlingRights ->
+                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights moves
+                )
+                (D.decodeValue boardDecoder (E.string rawBoard))
+                (D.decodeValue turnDecoder (E.string rawTurn))
+                (D.decodeValue enpassantDecoder (E.string rawEnpassant))
+                (D.decodeValue castlingRightsDecoder (E.string rawCastlingRights))
+                |> Result.mapError (\_ -> "Parsing failed")
+
+        _ ->
+            Err <| fen ++ " doesn't look right. FEN needs to have 6 pieces of info"
+
+
+
+-- TODO: List into custom codec
+
+
+movesToDict : List Move -> Dict MoveKey Move
+movesToDict moves =
+    List.map (\move -> ( moveKey move, move )) moves
+        |> Dict.fromList
+
+
+moveKey : Move -> MoveKey
+moveKey { squareFrom, squareTo } =
+    squareFrom ++ squareTo
+
+
+type alias MoveKey =
+    String
+
+
+
+-- TODO: Turn instead of Team
+
+
+turnDecoder : D.Decoder Team
+turnDecoder =
+    D.andThen parseTurn D.string
+
+
+parseTurn : String -> D.Decoder Team
+parseTurn t =
+    case t of
+        "b" ->
+            D.succeed <| Black
+
+        "w" ->
+            D.succeed <| White
+
+        notTurn ->
+            D.fail <| notTurn ++ " is not a valid turn value"
+
+
+boardDecoder : D.Decoder (List ( Position, Piece ))
+boardDecoder =
+    D.andThen parseFenBoard D.string
+
+
+parseFenBoard : String -> D.Decoder (List ( Position, Piece ))
+parseFenBoard board =
+    String.split "/" board
+        |> List.foldr parseFenBoardHelp (D.succeed <| Builder 1 [])
+        |> D.map .pieces
+
+
+parseFenBoardHelp : String -> D.Decoder Builder -> D.Decoder Builder
+parseFenBoardHelp currentRow rowAccumulator =
+    D.andThen (parseFenRow currentRow) rowAccumulator
+
+
+parseFenRow : String -> Builder -> D.Decoder Builder
+parseFenRow fenRow { acc, pieces } =
+    String.toList fenRow
+        |> List.reverse
+        |> List.foldr (parseFenRowHelp acc) (D.succeed <| Builder 0 [])
+        |> D.map (\b -> Builder (acc + 1) (b.pieces ++ pieces))
+
+
+parseFenRowHelp : Int -> Char -> D.Decoder Builder -> D.Decoder Builder
+parseFenRowHelp row nextColumn accumulator =
+    D.andThen (parseCharacter row nextColumn) accumulator
+
+
+type alias Builder =
+    { acc : Int
+    , pieces : List ( Position, Piece )
+    }
+
+
+parseCharacter : Int -> Char -> Builder -> D.Decoder Builder
+parseCharacter row c { acc, pieces } =
+    if Char.isDigit c then
+        case String.toInt (String.fromChar c) of
+            Nothing ->
+                D.fail "not a digit"
+
+            Just cc ->
+                D.succeed (Builder (acc + cc) pieces)
+
+    else
+        case parsePieceType <| Char.toLower c of
+            Err err ->
+                D.fail err
+
+            Ok pieceType ->
+                D.succeed (Builder (acc + 1) (pieces ++ [ ( Position (acc + 1) row, Piece (parseTeam c) pieceType ) ]))
+
+
+parseTeam : Char -> Team
+parseTeam c =
+    if Char.isLower c then
+        Black
+
+    else
+        White
+
+
+parsePieceType : Char -> Result String PieceType
+parsePieceType c =
+    case c of
+        'k' ->
+            Ok Monarch
+
+        'q' ->
+            Ok Advisor
+
+        'r' ->
+            Ok Rook
+
+        'b' ->
+            Ok Bishop
+
+        'n' ->
+            Ok Knight
+
+        'p' ->
+            Ok Pawn
+
+        cc ->
+            Err <| String.fromChar cc ++ " is not a valid pieceType"
+
+
+enpassantDecoder : D.Decoder (Maybe Position)
+enpassantDecoder =
+    D.andThen parseEnpassant D.string
+
+
+parseEnpassant : String -> D.Decoder (Maybe Position)
+parseEnpassant t =
+    case t of
+        "-" ->
+            D.succeed <| Nothing
+
+        algebraic ->
+            D.map Just (Position.decode algebraic)
+
+
+castlingRightsDecoder : D.Decoder (List CastlingRight)
+castlingRightsDecoder =
+    D.andThen parseCastlingRights D.string
+
+
+
+-- TODO. . . what is even happening in here?
+
+
+parseCastlingRights : String -> D.Decoder (List CastlingRight)
+parseCastlingRights t =
+    case t of
+        "-" ->
+            D.succeed []
+
+        castlingRights ->
+            case
+                List.foldl
+                    (\a b ->
+                        case b of
+                            Ok going ->
+                                case parseCastlingRight a of
+                                    Ok nextOne ->
+                                        Ok (nextOne :: going)
+
+                                    Err err ->
+                                        Err err
+
+                            Err err ->
+                                Err err
+                    )
+                    (Ok [])
+                    (String.split "" castlingRights)
+            of
+                Ok rights ->
+                    D.succeed rights
+
+                Err bad ->
+                    D.fail ""
+
+
+parseCastlingRight : String -> Result String CastlingRight
+parseCastlingRight t =
+    case t of
+        "q" ->
+            Ok <| AdvisorSide Black
+
+        "k" ->
+            Ok <| MonarchSide Black
+
+        "Q" ->
+            Ok <| AdvisorSide White
+
+        "K" ->
+            Ok <| MonarchSide White
+
+        bad ->
+            Err <| bad ++ " is not a valid castlingRight"
