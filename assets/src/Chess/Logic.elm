@@ -367,6 +367,7 @@ findChecks ({ occupiedSquares, turn } as game) =
 
         enemyTeam =
             List.filter (opponentTeam turn) occupiedAsList
+                |> List.filter (isMonarch >> not)
 
         fromTuple ( a, b ) fn =
             fn a b
@@ -761,7 +762,7 @@ checkMoveInDirectionRepeating ( columnDelta, rowDeltay ) (Position column row) o
         piece =
             Dict.get ( nextColumn, nextRow ) occupiedSquares
     in
-    if nextColumn == 0 || nextRow == 0 || nextColumn == 9 || nextRow == 9 then
+    if nextColumn <= 0 || nextRow <= 0 || nextColumn >= 9 || nextRow >= 9 then
         False
 
     else if ( nextColumn, nextRow ) == ( column, row ) && not (occupiedByFriendly piece team) then

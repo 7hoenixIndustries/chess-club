@@ -72,7 +72,7 @@ type alias Model =
     { game : Logic.Game
     , considering : Considering
     , playerTeam : Team
-    , reinforcing : List Move
+    , reinforcing : List Position
     , dragStuff : DragStuff
 
     -- TODO: Bleh. Do not like the direct dependency on Browser.Dom.Element
@@ -95,6 +95,7 @@ type alias DragStuffInner =
     , piece : Logic.Piece
     , startingPosition : Position
     , dragState : DragState
+    , currentPosition : Position
     }
 
 
@@ -148,7 +149,10 @@ init availableMoves currentState mapMsg =
             makeGame availableMoves currentState
     in
     ( Model game NotConsidering Logic.Black [] NoPieceInHand Nothing Nothing
-    , Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
+    , Cmd.batch
+        [ Task.attempt (mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
+        , Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
+        ]
     )
 
 
@@ -163,6 +167,7 @@ makeGame availableMoves currentState =
 
 type Msg
     = ChangeTeam Team
+    | FindReinforcements Position ()
     | StartConsidering Position
     | StartHovering Position
     | StopHovering
@@ -185,6 +190,9 @@ update callbacks msg model =
     case msg of
         ChangeTeam color ->
             ( { model | playerTeam = color }, Cmd.none )
+
+        FindReinforcements currentPosition _ ->
+            ( { model | reinforcing = Logic.canMoveTo currentPosition model.game }, Cmd.none )
 
         StartConsidering position ->
             ( { model | considering = ConsideringMovingTo position }, Cmd.none )
@@ -218,10 +226,12 @@ update callbacks msg model =
                                 , dragState = Moving x y x y
                                 , startingPosition = startingPosition
                                 , piece = piece
+                                , currentPosition = startingPosition
                                 }
                     in
                     ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game }
-                    , Task.attempt (callbacks.mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
+                    , Cmd.none
+                      --, Task.attempt (callbacks.mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
                     )
 
                 PieceInHand _ ->
@@ -232,7 +242,7 @@ update callbacks msg model =
                 NoPieceInHand ->
                     ( { model | reinforcing = [] }, Cmd.none )
 
-                PieceInHand ({ dragState, startingPosition } as dragStuffInner) ->
+                PieceInHand ({ dragState, startingPosition, currentPosition } as dragStuffInner) ->
                     let
                         (Moving startX startY _ _) =
                             dragState
@@ -241,21 +251,26 @@ update callbacks msg model =
                             Moving startX startY currentX currentY
 
                         updatedDragStuffInner =
-                            { dragStuffInner | dragState = updatedDragState }
+                            case model.browserBoard of
+                                Nothing ->
+                                    { dragStuffInner | dragState = updatedDragState }
 
-                        reinforcingUpdates =
-                            []
+                                Just browserBoard ->
+                                    case findCurrentPosition dragState browserBoard.element model.game.turn of
+                                        Nothing ->
+                                            { dragStuffInner | dragState = updatedDragState }
 
-                        -- TODO: fix this.
-                        --reinforcingUpdates =
-                        --    Maybe.andThen (\browserBoard -> findCurrentPosition updatedDragStuffInner browserBoard.element model.game.turn) model.browserBoard
-                        --        |> Prelude.maybe [] (\current -> calculateReinforcingSquares startingPosition current model.game)
+                                        Just updatedCurrentPosition ->
+                                            { dragStuffInner | dragState = updatedDragState, currentPosition = updatedCurrentPosition }
                     in
                     ( { model
                         | dragStuff = PieceInHand updatedDragStuffInner
-                        , reinforcing = reinforcingUpdates
                       }
-                    , Cmd.none
+                    , if updatedDragStuffInner.currentPosition /= currentPosition then
+                        Task.perform (callbacks.mapMsg << FindReinforcements updatedDragStuffInner.currentPosition) (Task.succeed ())
+
+                      else
+                        Cmd.none
                     )
 
         StopDragging currentX currentY ->
@@ -393,8 +408,8 @@ reverseIfWhite color idx =
         idx
 
 
-findCurrentPosition : DragStuffInner -> { x : Float, y : Float, width : Float, height : Float } -> Team -> Maybe Position
-findCurrentPosition { dragState } element turn =
+findCurrentPosition : DragState -> { x : Float, y : Float, width : Float, height : Float } -> Team -> Maybe Position
+findCurrentPosition dragState element turn =
     let
         (Moving _ _ currentX currentY) =
             dragState
@@ -465,7 +480,7 @@ viewTurn game playerColor =
         ]
 
 
-viewBoard : Logic.Game -> List Move -> Considering -> Team -> DragStuff -> Maybe Int -> Html Msg
+viewBoard : Logic.Game -> List Position -> Considering -> Team -> DragStuff -> Maybe Int -> Html Msg
 viewBoard game reinforcing considering playerColor dragStuff squareSize =
     div []
         [ Prelude.maybe (span [] []) (lazy5 viewGhostSquare game considering playerColor dragStuff) squareSize
@@ -481,12 +496,12 @@ viewBoard game reinforcing considering playerColor dragStuff squareSize =
         ]
 
 
-viewRow : Logic.Game -> List Move -> Considering -> Team -> Int -> List (Html Msg)
+viewRow : Logic.Game -> List Position -> Considering -> Team -> Int -> List (Html Msg)
 viewRow game reinforcing considering playerColor row =
     List.map (lazy6 viewCell game reinforcing considering playerColor row) (List.reverse (List.range 1 8))
 
 
-viewCell : Logic.Game -> List Move -> Considering -> Team -> Int -> Int -> Html Msg
+viewCell : Logic.Game -> List Position -> Considering -> Team -> Int -> Int -> Html Msg
 viewCell game reinforcing considering playerColor row column =
     div
         [ classList
@@ -543,7 +558,7 @@ getDragCoordinates { x, y, dragState } =
     ( x + endX - startX, y + endY - startY )
 
 
-viewSquare : Logic.Game -> List Move -> Considering -> Team -> Position -> Html Msg
+viewSquare : Logic.Game -> List Position -> Considering -> Team -> Position -> Html Msg
 viewSquare game reinforcing considering playerColor position =
     if game.turn == playerColor then
         case Dict.get (Position.toRaw position) game.occupiedSquares of
@@ -572,9 +587,9 @@ viewSquare game reinforcing considering playerColor position =
         viewSquareDetails game.occupiedSquares position [] []
 
 
-reinforces : Position -> List Move -> Bool
+reinforces : Position -> List Position -> Bool
 reinforces position reinforcing =
-    List.any (\move -> move.squareFrom == Position.toAlgebraic position) reinforcing
+    List.any ((==) position) reinforcing
 
 
 viewSquareDetails : Dict ( Int, Int ) Logic.Piece -> Position -> List ( String, Bool ) -> List (Attribute Msg) -> Html Msg
@@ -607,40 +622,6 @@ shading column row =
 
 
 
---getLetter : Int -> String
---getLetter i =
---    case i of
---        1 ->
---            "a"
---
---        2 ->
---            "b"
---
---        3 ->
---            "c"
---
---        4 ->
---            "d"
---
---        5 ->
---            "e"
---
---        6 ->
---            "f"
---
---        7 ->
---            "g"
---
---        8 ->
---            "h"
---
---        _ ->
---            "woof"
---
---
---toAlgebraic : Position -> String
---toAlgebraic ( column, row ) =
---    getLetter column ++ String.fromInt row
 -- SQUARE PROPERTIES
 
 
@@ -680,148 +661,6 @@ movesToPosition squareTo squareFrom =
 
 
 
----- SERIALIZATION
---
---
---fromFen : List Move -> String -> Result String Game
---fromFen moves fen =
---    case String.split " " fen of
---        [ rawBoard, rawTurn, c, d, e, f ] ->
---            case ( D.decodeValue boardDecoder (E.string rawBoard), D.decodeValue turnDecoder (E.string rawTurn) ) of
---                ( Ok board, Ok turn ) ->
---                    Ok <| Game (Dict.fromList board) moves (movesToDict moves) turn
---
---                _ ->
---                    Err <| "Something went wrong"
---
---        _ ->
---            Err <| fen ++ " doesn't look right. FEN needs to have 6 pieces of info"
---
---
---
----- TODO: List into custom codec
---
---
---movesToDict : List Move -> Dict MoveKey Move
---movesToDict moves =
---    List.map (\move -> ( moveKey move, move )) moves
---        |> Dict.fromList
---
---
---moveKey : Move -> MoveKey
---moveKey { squareFrom, squareTo } =
---    squareFrom ++ squareTo
---
---
---type alias MoveKey =
---    String
---
---
---turnDecoder : D.Decoder Turn
---turnDecoder =
---    D.andThen parseTurn D.string
---
---
---parseTurn : String -> D.Decoder Turn
---parseTurn t =
---    case t of
---        "b" ->
---            D.succeed <| Turn Black
---
---        "w" ->
---            D.succeed <| Turn White
---
---        notTurn ->
---            D.fail <| notTurn ++ " is not a valid turn value"
---
---
---boardDecoder : D.Decoder (List ( Position, Piece ))
---boardDecoder =
---    D.andThen parseFenBoard D.string
---
---
---parseFenBoard : String -> D.Decoder (List ( Position, Piece ))
---parseFenBoard board =
---    String.split "/" board
---        |> List.foldr parseFenBoardHelp (D.succeed <| Builder 1 [])
---        |> D.map .pieces
---
---
---parseFenBoardHelp : String -> D.Decoder Builder -> D.Decoder Builder
---parseFenBoardHelp currentRow rowAccumulator =
---    D.andThen (parseFenRow currentRow) rowAccumulator
---
---
---parseFenRow : String -> Builder -> D.Decoder Builder
---parseFenRow fenRow { acc, pieces } =
---    String.toList fenRow
---        |> List.reverse
---        |> List.foldr (parseFenRowHelp acc) (D.succeed <| Builder 0 [])
---        |> D.map (\b -> Builder (acc + 1) (b.pieces ++ pieces))
---
---
---parseFenRowHelp : Int -> Char -> D.Decoder Builder -> D.Decoder Builder
---parseFenRowHelp row nextColumn accumulator =
---    D.andThen (parseCharacter row nextColumn) accumulator
---
---
---type alias Builder =
---    { acc : Int
---    , pieces : List ( Position, Piece )
---    }
---
---
---parseCharacter : Int -> Char -> Builder -> D.Decoder Builder
---parseCharacter row c { acc, pieces } =
---    if Char.isDigit c then
---        case String.toInt (String.fromChar c) of
---            Nothing ->
---                D.fail "not a digit"
---
---            Just cc ->
---                D.succeed (Builder (acc + cc) pieces)
---
---    else
---        case parsePieceType <| Char.toLower c of
---            Err err ->
---                D.fail err
---
---            Ok pieceType ->
---                D.succeed (Builder (acc + 1) (pieces ++ [ ( Position ( acc + 1) row , Piece (parseColor c) pieceType ) ]))
---
---
---parseColor : Char -> Color
---parseColor c =
---    if Char.isLower c then
---        Black
---
---    else
---        White
---
---
---parsePieceType : Char -> Result String PieceType
---parsePieceType c =
---    case c of
---        'k' ->
---            Ok Monarch
---
---        'q' ->
---            Ok Advisor
---
---        'r' ->
---            Ok Rook
---
---        'b' ->
---            Ok Bishop
---
---        'n' ->
---            Ok Knight
---
---        'p' ->
---            Ok Pawn
---
---        cc ->
---            Err <| String.fromChar cc ++ " is not a valid pieceType"
 -- SVG
 
 
