@@ -24,7 +24,7 @@ backend =
 
 
 loadedData =
-    { scenarios = Just [ Scenario.Loaded <| Scenario.Scenario [] "8/8/8/8/2p5/r3k3/8/R3K3 b - - 1 77" (Id "1") ]
+    { scenarios = Just [ Scenario.Loaded <| Scenario.Scenario [] "8/8/8/8/2p5/r3k3/8/R3K3 b - - 1 77" (Just "a1a2") (Id "1") ]
     }
 
 

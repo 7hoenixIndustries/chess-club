@@ -1,5 +1,6 @@
 module Chess.Logic exposing
-    ( CastlingRight(..)
+    ( BasicMove
+    , CastlingRight(..)
     , Game
     , MoveKey
     , Piece(..)
@@ -14,6 +15,8 @@ module Chess.Logic exposing
     , init
     , isCheckmate
     , makeMove
+    , nextTurn
+    , removePiece
     )
 
 import Chess.Position as Position exposing (Position(..))
@@ -57,8 +60,13 @@ type alias Game =
     , turn : Team
     , enpassant : Maybe Position
     , castlingRights : List CastlingRight
+    , recentMove : Maybe BasicMove
     , moves : Dict MoveKey Move
     }
+
+
+type alias BasicMove =
+    { from : Position, to : Position }
 
 
 type CastlingRight
@@ -169,6 +177,11 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant, castlingRights
                 |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn castlingRights })
 
 
+removePiece square ({ occupiedSquares } as game) =
+    Dict.remove (Position.toRaw square) occupiedSquares
+        |> (\updatedSquares -> { game | occupiedSquares = updatedSquares })
+
+
 castlingRightsOnCapture squareTo team castlingRights =
     case ( squareTo, opponentTurn team ) of
         ( ( 8, 8 ), Black ) ->
@@ -237,12 +250,12 @@ asht (Occupied position piece) b =
 
 init : List Square -> Team -> Maybe Position -> List CastlingRight -> Game
 init squares turn enpassant castlingRights =
-    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Dict.empty
+    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Nothing Dict.empty
 
 
 blankBoard : Game
 blankBoard =
-    Game Dict.empty Black Nothing [] Dict.empty
+    Game Dict.empty Black Nothing [] Nothing Dict.empty
 
 
 
@@ -366,6 +379,11 @@ findChecks ({ occupiedSquares, turn } as game) =
     in
     List.filter (\( pieceLocation, p ) -> pieceCanMoveTo { game | turn = opponentTurn turn } (fromTuple monarchLocation Position) occupiedSquares (opponentTurn turn) pieceLocation) enemyTeam
         |> List.map (\( pos, piece ) -> Occupied (fromTuple pos Position) piece)
+
+
+nextTurn : Game -> Game
+nextTurn g =
+    { g | turn = opponentTurn g.turn }
 
 
 opponentTurn : Team -> Team
@@ -832,13 +850,13 @@ occupiedByFriendly piece team =
 -- SERIALIZATION
 
 
-fromFen : List Move -> String -> Result String Game
-fromFen moves fen =
+fromFen : List Move -> String -> Maybe BasicMove -> Result String Game
+fromFen moves fen recentMove =
     case String.split " " fen of
         [ rawBoard, rawTurn, rawCastlingRights, rawEnpassant, e, f ] ->
             Result.map4
                 (\board turn enpassant castlingRights ->
-                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights (movesToDict moves)
+                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights recentMove (movesToDict moves)
                 )
                 (D.decodeValue boardDecoder (E.string rawBoard))
                 (D.decodeValue turnDecoder (E.string rawTurn))

@@ -126,7 +126,7 @@ update backend msg model =
                 Ok scenario ->
                     let
                         ( chessModel, chessMsg ) =
-                            Chess.init scenario.availableMoves scenario.currentState ChessMsg
+                            Chess.init scenario.availableMoves scenario.currentState scenario.recentMove ChessMsg
                     in
                     -- TODO: chessModel is directly dependent on scenario. . . are we able to combine these somehow?
                     ( { model
@@ -178,12 +178,21 @@ update backend msg model =
                 Just scenario ->
                     case Json.Decode.decodeValue (subscribeToMoves scenario.id |> Graphql.Document.decoder) newData of
                         Ok s ->
-                            ( { model
-                                | scenario = Just s
-                                , chessModel = Maybe.map (\chessModel -> { chessModel | game = Chess.makeGame s.availableMoves s.currentState }) model.chessModel
-                              }
-                            , Cmd.none
-                            )
+                            let
+                                foo =
+                                    Maybe.map (\chessModel -> Chess.moveMade s.availableMoves s.currentState s.recentMove ChessMsg chessModel) model.chessModel
+                            in
+                            case foo of
+                                Just ( updatedChessModel, chessMsg ) ->
+                                    ( { model
+                                        | scenario = Just s
+                                        , chessModel = Just updatedChessModel
+                                      }
+                                    , chessMsg
+                                    )
+
+                                Nothing ->
+                                    ( { model | scenario = Just s, chessModel = Nothing }, Cmd.none )
 
                         Err error ->
                             ( model, Cmd.none )

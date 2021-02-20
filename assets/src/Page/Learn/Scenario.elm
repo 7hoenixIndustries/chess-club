@@ -15,7 +15,7 @@ module Page.Learn.Scenario exposing
 import Api.Mutation as Mutation
 import Api.Object
 import Api.Object.Move
-import Api.Object.Scenario exposing (availableMoves, currentState, id)
+import Api.Object.Scenario exposing (availableMoves, currentState, id, recentMove)
 import Api.Query exposing (scenario, scenarios)
 import Api.Scalar exposing (Id(..))
 import Api.Subscription as Subscription
@@ -37,6 +37,7 @@ type Scenario2
 type alias Scenario =
     { availableMoves : List Move
     , currentState : String
+    , recentMove : Maybe String
     , id : Id
     }
 
@@ -48,9 +49,10 @@ scenarioQuery id =
 
 scenarioSelection : SelectionSet Scenario Api.Object.Scenario
 scenarioSelection =
-    SelectionSet.map3 Scenario
+    SelectionSet.map4 Scenario
         (availableMoves moveSelection)
         currentState
+        recentMove
         id
 
 

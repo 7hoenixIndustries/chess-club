@@ -4,6 +4,7 @@ module Chess.MetaGame exposing
     , Msg
     , init
     , makeGame
+    , moveMade
     , reinforcingSquares
     , subscriptions
     , update
@@ -35,7 +36,7 @@ import Dict exposing (Dict)
 import Html exposing (Attribute, Html, div, fieldset, input, label, span, text)
 import Html.Attributes exposing (checked, class, classList, name, type_)
 import Html.Events exposing (on, onClick, onInput, onMouseDown, onMouseLeave, onMouseOver)
-import Html.Lazy exposing (lazy, lazy2, lazy3, lazy4, lazy5, lazy6)
+import Html.Lazy exposing (lazy, lazy2, lazy3, lazy4, lazy5, lazy6, lazy7)
 import Json.Decode as D
 import Json.Encode as E
 import List.Extra
@@ -71,6 +72,7 @@ type alias Model =
     , considering : Considering
     , playerTeam : Team
     , reinforcing : List Position
+    , opponentReinforcing : List Position
     , dragStuff : DragStuff
 
     -- TODO: Bleh. Do not like the direct dependency on Browser.Dom.Element
@@ -107,23 +109,48 @@ type Considering
     | ConsideringMovingTo Position
 
 
-init : List Move -> String -> (Msg -> msg) -> ( Model, Cmd msg )
-init availableMoves currentState mapMsg =
+init : List Move -> String -> Maybe String -> (Msg -> msg) -> ( Model, Cmd msg )
+init availableMoves currentState recentMove mapMsg =
     let
         game =
-            makeGame availableMoves currentState
+            makeGame availableMoves currentState recentMove
     in
-    ( Model game NotConsidering Logic.Black [] NoPieceInHand Nothing Nothing
+    ( Model game NotConsidering Logic.Black [] [] NoPieceInHand Nothing Nothing
     , Cmd.batch
         [ Task.attempt (mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
         , Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
+        , Task.perform (mapMsg << FindOpponentReinforcements) (Task.succeed ())
         ]
     )
 
 
-makeGame : List Move -> String -> Logic.Game
-makeGame availableMoves currentState =
-    Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState
+makeGame : List Move -> String -> Maybe String -> Logic.Game
+makeGame availableMoves currentState recentMove =
+    case recentMove of
+        Nothing ->
+            Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState Nothing
+
+        Just r ->
+            case String.toList r of
+                [ a, b, c, d ] ->
+                    (Result.map2
+                        Logic.BasicMove
+                        (D.decodeValue Position.decoder (E.string (String.fromList [ a, b ])))
+                        (D.decodeValue Position.decoder (E.string (String.fromList [ c, d ])))
+                        |> Result.mapError (\_ -> "Not a valid move")
+                    )
+                        |> Result.andThen (\basicMove -> Logic.fromFen availableMoves currentState (Just basicMove))
+                        |> Result.withDefault Logic.blankBoard
+
+                _ ->
+                    Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState Nothing
+
+
+moveMade : List Move -> String -> Maybe String -> (Msg -> msg) -> Model -> ( Model, Cmd msg )
+moveMade availableMoves currentState recentMove mapMsg model =
+    ( { model | game = makeGame availableMoves currentState recentMove }
+    , Task.perform (mapMsg << FindOpponentReinforcements) (Task.succeed ())
+    )
 
 
 
@@ -133,6 +160,7 @@ makeGame availableMoves currentState =
 type Msg
     = ChangeTeam Team
     | FindReinforcements Position ()
+    | FindOpponentReinforcements ()
     | StartConsidering Position
     | StartHovering Position
     | StopHovering
@@ -172,6 +200,18 @@ update callbacks msg model =
                     , Cmd.none
                     )
 
+        FindOpponentReinforcements _ ->
+            case model.game.recentMove of
+                Nothing ->
+                    ( { model | opponentReinforcing = [] }, Cmd.none )
+
+                Just { from, to } ->
+                    ( { model
+                        | opponentReinforcing = Logic.canAttack to (Logic.nextTurn model.game |> Logic.removePiece to)
+                      }
+                    , Cmd.none
+                    )
+
         StartConsidering position ->
             ( { model | considering = ConsideringMovingTo position }, Cmd.none )
 
@@ -207,7 +247,7 @@ update callbacks msg model =
                                 , currentPosition = startingPosition
                                 }
                     in
-                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game }
+                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game, opponentReinforcing = [] }
                     , Task.perform (callbacks.mapMsg << FindReinforcements startingPosition) (Task.succeed ())
                     )
 
@@ -270,12 +310,14 @@ update callbacks msg model =
         MakeMoveIfDragIsOnBoard ({ piece, startingPosition } as dragStuffInner) result ->
             case result of
                 Err err ->
-                    ( model, Cmd.none )
+                    ( model, Task.perform (callbacks.mapMsg << FindOpponentReinforcements) (Task.succeed ()) )
 
                 Ok boardElement ->
                     case positionOnBoard dragStuffInner boardElement.element model.game.turn of
                         Nothing ->
-                            ( { model | game = placePiece startingPosition piece model.game }, Cmd.none )
+                            ( { model | game = placePiece startingPosition piece model.game }
+                            , Task.perform (callbacks.mapMsg << FindOpponentReinforcements) (Task.succeed ())
+                            )
 
                         Just finalPosition ->
                             case friendlyMovesToPosition model.game.turn finalPosition startingPosition (Dict.toList model.game.moves |> List.map Tuple.second) of
@@ -291,7 +333,9 @@ update callbacks msg model =
                                     )
 
                                 [] ->
-                                    ( { model | game = placePiece startingPosition piece model.game }, Cmd.none )
+                                    ( { model | game = placePiece startingPosition piece model.game }
+                                    , Task.perform (callbacks.mapMsg << FindOpponentReinforcements) (Task.succeed ())
+                                    )
 
         -- TODO: use this instead: https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onResize
         -- Will make all piece sizes look the same.
@@ -424,10 +468,10 @@ positionIsOnBoard x y element =
 
 
 view : Model -> Html Msg
-view { game, reinforcing, considering, playerTeam, dragStuff, squareSize } =
+view { game, reinforcing, opponentReinforcing, considering, playerTeam, dragStuff, squareSize } =
     div [ class "container mx-auto" ]
         [ lazy2 viewTurn game playerTeam
-        , lazy6 viewBoard game reinforcing considering playerTeam dragStuff squareSize
+        , lazy7 viewBoard game reinforcing opponentReinforcing considering playerTeam dragStuff squareSize
         , lazy viewSettings playerTeam
         ]
 
@@ -462,8 +506,8 @@ viewTurn game playerColor =
         ]
 
 
-viewBoard : Logic.Game -> List Position -> Considering -> Team -> DragStuff -> Maybe Int -> Html Msg
-viewBoard game reinforcing considering playerColor dragStuff squareSize =
+viewBoard : Logic.Game -> List Position -> List Position -> Considering -> Team -> DragStuff -> Maybe Int -> Html Msg
+viewBoard game reinforcing opponentReinforcing considering playerColor dragStuff squareSize =
     div []
         [ Prelude.maybe (span [] []) (lazy5 viewGhostSquare game considering playerColor dragStuff) squareSize
         , div
@@ -474,17 +518,17 @@ viewBoard game reinforcing considering playerColor dragStuff squareSize =
                 ]
             , onMouseLeave StopHovering
             ]
-            (List.concatMap (viewRow game reinforcing considering playerColor) (List.range 1 8))
+            (List.concatMap (viewRow game reinforcing opponentReinforcing considering playerColor) (List.range 1 8))
         ]
 
 
-viewRow : Logic.Game -> List Position -> Considering -> Team -> Int -> List (Html Msg)
-viewRow game reinforcing considering playerColor row =
-    List.map (lazy6 viewCell game reinforcing considering playerColor row) (List.reverse (List.range 1 8))
+viewRow : Logic.Game -> List Position -> List Position -> Considering -> Team -> Int -> List (Html Msg)
+viewRow game reinforcing opponentReinforcing considering playerColor row =
+    List.map (lazy7 viewCell game reinforcing opponentReinforcing considering playerColor row) (List.reverse (List.range 1 8))
 
 
-viewCell : Logic.Game -> List Position -> Considering -> Team -> Int -> Int -> Html Msg
-viewCell game reinforcing considering playerColor row column =
+viewCell : Logic.Game -> List Position -> List Position -> Considering -> Team -> Int -> Int -> Html Msg
+viewCell game reinforcing opponentReinforcing considering playerColor row column =
     div
         [ classList
             [ ( "column-" ++ String.fromInt column, True )
@@ -493,7 +537,7 @@ viewCell game reinforcing considering playerColor row column =
             , ( "rotated", playerColor == Logic.White )
             ]
         ]
-        [ lazy5 viewSquare game reinforcing considering playerColor (Position column row) ]
+        [ lazy6 viewSquare game reinforcing opponentReinforcing considering playerColor (Position column row) ]
 
 
 viewGhostSquare : Logic.Game -> Considering -> Team -> DragStuff -> Int -> Html Msg
@@ -540,15 +584,17 @@ getDragCoordinates { x, y, dragState } =
     ( x + endX - startX, y + endY - startY )
 
 
-viewSquare : Logic.Game -> List Position -> Considering -> Team -> Position -> Html Msg
-viewSquare game reinforcing considering playerColor position =
+viewSquare : Logic.Game -> List Position -> List Position -> Considering -> Team -> Position -> Html Msg
+viewSquare game reinforcing opponentReinforcing considering playerColor position =
     if game.turn == playerColor then
         case Dict.get (Position.toRaw position) game.occupiedSquares of
             Just piece ->
                 div
                     [ classList
                         [ ( "w-full h-full m-0", True )
-                        , ( "bg-green-900", reinforces position reinforcing )
+                        , ( "bg-green-500", reinforces position reinforcing )
+                        , ( "bg-yellow-500", reinforces position opponentReinforcing )
+                        , ( "bg-yellow-300 border-4 border-black", isRecentMove position game.recentMove )
                         , ( "transition", True )
                         , ( Position.toAlgebraic position, True )
                         ]
@@ -561,12 +607,18 @@ viewSquare game reinforcing considering playerColor position =
                 div
                     [ classList
                         [ ( "w-full h-full m-0", True )
+                        , ( "bg-yellow-300 border-4 border-black", isRecentMove position game.recentMove )
                         ]
                     ]
                     []
 
     else
         viewSquareDetails game.occupiedSquares position [] []
+
+
+isRecentMove : Position -> Maybe Logic.BasicMove -> Bool
+isRecentMove position recentMove =
+    Prelude.maybe False (\{ from, to } -> from == position || to == position) recentMove
 
 
 reinforces : Position -> List Position -> Bool
