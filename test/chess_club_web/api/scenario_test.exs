@@ -99,20 +99,21 @@ defmodule ChessClubWeb.ScenarioTest do
              }
     end
 
-    test "returns available_moves and current_state", %{authorized_conn: authorized_conn} do
+    test "returns scenario data", %{authorized_conn: authorized_conn} do
       starting_state = "7k/8/7K/8/7P/8/8/8 b - - 0 77"
       scenario = Factory.insert(:scenario, %{starting_state: starting_state})
 
       query = """
       query {
         scenario(scenarioId: #{scenario.id}) {
-          currentState,
+          currentState
           availableMoves {
             fenAfterMove
             squareFrom
             squareTo
             color
           }
+          recentMove
           id
         }
       }
@@ -158,7 +159,8 @@ defmodule ChessClubWeb.ScenarioTest do
                  "scenario" => %{
                    "id" => "#{scenario.id}",
                    "availableMoves" => expected_moves,
-                   "currentState" => starting_state
+                   "currentState" => starting_state,
+                   "recentMove" => nil
                  }
                }
              }
@@ -178,7 +180,7 @@ defmodule ChessClubWeb.ScenarioTest do
       query = """
       query {
         scenario(scenarioId: #{move.scenario_id}) {
-          currentState,
+          currentState
           availableMoves {
             fenAfterMove
             squareFrom
@@ -186,6 +188,7 @@ defmodule ChessClubWeb.ScenarioTest do
             moveCommand
             color
           }
+          recentMove
           id
         }
       }
@@ -252,7 +255,8 @@ defmodule ChessClubWeb.ScenarioTest do
                  "scenario" => %{
                    "id" => "#{move.scenario_id}",
                    "availableMoves" => expected_moves,
-                   "currentState" => expected_current_state
+                   "currentState" => expected_current_state,
+                   "recentMove" => "h8g8"
                  }
                }
              }
@@ -286,5 +290,8 @@ defmodule ChessClubWeb.ScenarioTest do
                }
              }
     end
+
+    # test "will not make a move if invalid", %{authorized_conn: authorized_conn} do
+    # end
   end
 end

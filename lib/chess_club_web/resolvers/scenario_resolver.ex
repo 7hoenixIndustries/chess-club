@@ -57,9 +57,16 @@ defmodule ChessClubWeb.ScenarioResolver do
     {available_moves, current_state} =
       Game.available_moves(Game, scenario.starting_state, move_commands)
 
+    recent_move =
+      move_commands
+      |> Enum.take(-1)
+      |> Enum.to_list()
+      |> List.first()
+
     %{
       current_state: current_state,
       available_moves: available_moves,
+      recent_move: recent_move,
       id: scenario.id
     }
   end
