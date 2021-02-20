@@ -178,21 +178,12 @@ update backend msg model =
                 Just scenario ->
                     case Json.Decode.decodeValue (subscribeToMoves scenario.id |> Graphql.Document.decoder) newData of
                         Ok s ->
-                            let
-                                foo =
-                                    Maybe.map (\chessModel -> Chess.moveMade s.availableMoves s.currentState s.recentMove ChessMsg chessModel) model.chessModel
-                            in
-                            case foo of
-                                Just ( updatedChessModel, chessMsg ) ->
-                                    ( { model
-                                        | scenario = Just s
-                                        , chessModel = Just updatedChessModel
-                                      }
-                                    , chessMsg
-                                    )
-
-                                Nothing ->
-                                    ( { model | scenario = Just s, chessModel = Nothing }, Cmd.none )
+                            ( { model
+                                | scenario = Just s
+                                , chessModel = Maybe.map (\chessModel -> { chessModel | game = Chess.makeGame s.availableMoves s.currentState s.recentMove }) model.chessModel
+                              }
+                            , Cmd.none
+                            )
 
                         Err error ->
                             ( model, Cmd.none )

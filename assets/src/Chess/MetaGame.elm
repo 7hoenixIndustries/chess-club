@@ -4,7 +4,6 @@ module Chess.MetaGame exposing
     , Msg
     , init
     , makeGame
-    , moveMade
     , reinforcingSquares
     , subscriptions
     , update
@@ -69,7 +68,6 @@ type alias Callbacks msg =
 
 type alias Model =
     { game : Logic.Game
-    , considering : Considering
     , playerTeam : Team
     , reinforcing : List Position
     , opponentReinforcing : List Position
@@ -103,23 +101,16 @@ type DragState
     = Moving Int Int Int Int
 
 
-type Considering
-    = NotConsidering
-    | HoveringOver Position
-    | ConsideringMovingTo Position
-
-
 init : List Move -> String -> Maybe String -> (Msg -> msg) -> ( Model, Cmd msg )
 init availableMoves currentState recentMove mapMsg =
     let
         game =
             makeGame availableMoves currentState recentMove
     in
-    ( Model game NotConsidering Logic.Black [] [] NoPieceInHand Nothing Nothing
+    ( Model game Logic.Black [] [] NoPieceInHand Nothing Nothing
     , Cmd.batch
         [ Task.attempt (mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
         , Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
-        , Task.perform (mapMsg << FindOpponentReinforcements) (Task.succeed ())
         ]
     )
 
@@ -146,13 +137,6 @@ makeGame availableMoves currentState recentMove =
                     Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState Nothing
 
 
-moveMade : List Move -> String -> Maybe String -> (Msg -> msg) -> Model -> ( Model, Cmd msg )
-moveMade availableMoves currentState recentMove mapMsg model =
-    ( { model | game = makeGame availableMoves currentState recentMove }
-    , Task.perform (mapMsg << FindOpponentReinforcements) (Task.succeed ())
-    )
-
-
 
 -- Msg
 
@@ -160,10 +144,6 @@ moveMade availableMoves currentState recentMove mapMsg model =
 type Msg
     = ChangeTeam Team
     | FindReinforcements Position ()
-    | FindOpponentReinforcements ()
-    | StartConsidering Position
-    | StartHovering Position
-    | StopHovering
     | MakeMove Move
       -- Drag And Drop
     | StartDragging Int Int Position Logic.Piece
@@ -187,7 +167,7 @@ update callbacks msg model =
         FindReinforcements currentPosition _ ->
             case model.dragStuff of
                 NoPieceInHand ->
-                    ( { model | reinforcing = [] }, Cmd.none )
+                    ( { model | reinforcing = [], opponentReinforcing = [] }, Cmd.none )
 
                 PieceInHand { startingPosition } ->
                     ( { model
@@ -196,41 +176,17 @@ update callbacks msg model =
                                 { starting = startingPosition, current = currentPosition }
                                 (Logic.canAttack currentPosition model.game)
                                 model.game.moves
+                        , opponentReinforcing =
+                            reinforcingSquares
+                                { starting = startingPosition, current = currentPosition }
+                                (Logic.canAttack currentPosition (Logic.nextTurn model.game |> Logic.removePiece currentPosition))
+                                model.game.moves
                       }
                     , Cmd.none
                     )
-
-        FindOpponentReinforcements _ ->
-            case model.game.recentMove of
-                Nothing ->
-                    ( { model | opponentReinforcing = [] }, Cmd.none )
-
-                Just { from, to } ->
-                    ( { model
-                        | opponentReinforcing = Logic.canAttack to (Logic.nextTurn model.game |> Logic.removePiece to)
-                      }
-                    , Cmd.none
-                    )
-
-        StartConsidering position ->
-            ( { model | considering = ConsideringMovingTo position }, Cmd.none )
-
-        StartHovering position ->
-            ( { model | considering = HoveringOver position }, Cmd.none )
-
-        StopHovering ->
-            case model.considering of
-                ConsideringMovingTo _ ->
-                    ( model, Cmd.none )
-
-                HoveringOver _ ->
-                    ( { model | considering = NotConsidering }, Cmd.none )
-
-                NotConsidering ->
-                    ( { model | considering = NotConsidering }, Cmd.none )
 
         MakeMove move ->
-            ( { model | considering = NotConsidering }, Task.perform callbacks.makeMove (Task.succeed move) )
+            ( model, Task.perform callbacks.makeMove (Task.succeed move) )
 
         -- Drag and Drop
         StartDragging x y startingPosition piece ->
@@ -257,7 +213,7 @@ update callbacks msg model =
         MoveDragging currentX currentY ->
             case model.dragStuff of
                 NoPieceInHand ->
-                    ( { model | reinforcing = [] }, Cmd.none )
+                    ( { model | reinforcing = [], opponentReinforcing = [] }, Cmd.none )
 
                 PieceInHand ({ dragState, startingPosition, currentPosition } as dragStuffInner) ->
                     let
@@ -303,20 +259,20 @@ update callbacks msg model =
                         updatedDragStuffInner =
                             { dragStuffInner | x = x + currentX - startX, y = y + currentY - startY }
                     in
-                    ( { model | dragStuff = NoPieceInHand, reinforcing = [] }
+                    ( { model | dragStuff = NoPieceInHand, reinforcing = [], opponentReinforcing = [] }
                     , Task.attempt (callbacks.mapMsg << MakeMoveIfDragIsOnBoard updatedDragStuffInner) (Browser.Dom.getElement "main-board")
                     )
 
         MakeMoveIfDragIsOnBoard ({ piece, startingPosition } as dragStuffInner) result ->
             case result of
                 Err err ->
-                    ( model, Task.perform (callbacks.mapMsg << FindOpponentReinforcements) (Task.succeed ()) )
+                    ( model, Cmd.none )
 
                 Ok boardElement ->
                     case positionOnBoard dragStuffInner boardElement.element model.game.turn of
                         Nothing ->
                             ( { model | game = placePiece startingPosition piece model.game }
-                            , Task.perform (callbacks.mapMsg << FindOpponentReinforcements) (Task.succeed ())
+                            , Cmd.none
                             )
 
                         Just finalPosition ->
@@ -334,7 +290,7 @@ update callbacks msg model =
 
                                 [] ->
                                     ( { model | game = placePiece startingPosition piece model.game }
-                                    , Task.perform (callbacks.mapMsg << FindOpponentReinforcements) (Task.succeed ())
+                                    , Cmd.none
                                     )
 
         -- TODO: use this instead: https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onResize
@@ -468,10 +424,10 @@ positionIsOnBoard x y element =
 
 
 view : Model -> Html Msg
-view { game, reinforcing, opponentReinforcing, considering, playerTeam, dragStuff, squareSize } =
+view { game, reinforcing, opponentReinforcing, playerTeam, dragStuff, squareSize } =
     div [ class "container mx-auto" ]
         [ lazy2 viewTurn game playerTeam
-        , lazy7 viewBoard game reinforcing opponentReinforcing considering playerTeam dragStuff squareSize
+        , lazy6 viewBoard game reinforcing opponentReinforcing playerTeam dragStuff squareSize
         , lazy viewSettings playerTeam
         ]
 
@@ -506,29 +462,28 @@ viewTurn game playerColor =
         ]
 
 
-viewBoard : Logic.Game -> List Position -> List Position -> Considering -> Team -> DragStuff -> Maybe Int -> Html Msg
-viewBoard game reinforcing opponentReinforcing considering playerColor dragStuff squareSize =
+viewBoard : Logic.Game -> List Position -> List Position -> Team -> DragStuff -> Maybe Int -> Html Msg
+viewBoard game reinforcing opponentReinforcing playerColor dragStuff squareSize =
     div []
-        [ Prelude.maybe (span [] []) (lazy5 viewGhostSquare game considering playerColor dragStuff) squareSize
+        [ Prelude.maybe (span [] []) (lazy4 viewGhostSquare game playerColor dragStuff) squareSize
         , div
             [ id "main-board"
             , classList
                 [ ( "h-96 w-96 md:h-constrained-1/2 md:w-constrained-1/2 lg:h-constrained-40% lg:w-constrained-40% 2xl:h-constrained-40% 2xl:w-constrained-40% grid grid-cols-8 grid-rows-8 border-2 border-gray-500 gap-0 shadow-2xl", True )
                 , ( "rotated", playerColor == Logic.White )
                 ]
-            , onMouseLeave StopHovering
             ]
-            (List.concatMap (viewRow game reinforcing opponentReinforcing considering playerColor) (List.range 1 8))
+            (List.concatMap (viewRow game reinforcing opponentReinforcing playerColor) (List.range 1 8))
         ]
 
 
-viewRow : Logic.Game -> List Position -> List Position -> Considering -> Team -> Int -> List (Html Msg)
-viewRow game reinforcing opponentReinforcing considering playerColor row =
-    List.map (lazy7 viewCell game reinforcing opponentReinforcing considering playerColor row) (List.reverse (List.range 1 8))
+viewRow : Logic.Game -> List Position -> List Position -> Team -> Int -> List (Html Msg)
+viewRow game reinforcing opponentReinforcing playerColor row =
+    List.map (lazy6 viewCell game reinforcing opponentReinforcing playerColor row) (List.reverse (List.range 1 8))
 
 
-viewCell : Logic.Game -> List Position -> List Position -> Considering -> Team -> Int -> Int -> Html Msg
-viewCell game reinforcing opponentReinforcing considering playerColor row column =
+viewCell : Logic.Game -> List Position -> List Position -> Team -> Int -> Int -> Html Msg
+viewCell game reinforcing opponentReinforcing playerColor row column =
     div
         [ classList
             [ ( "column-" ++ String.fromInt column, True )
@@ -537,11 +492,11 @@ viewCell game reinforcing opponentReinforcing considering playerColor row column
             , ( "rotated", playerColor == Logic.White )
             ]
         ]
-        [ lazy6 viewSquare game reinforcing opponentReinforcing considering playerColor (Position column row) ]
+        [ lazy5 viewSquare game reinforcing opponentReinforcing playerColor (Position column row) ]
 
 
-viewGhostSquare : Logic.Game -> Considering -> Team -> DragStuff -> Int -> Html Msg
-viewGhostSquare game considering playerColor dragStuff squareSize =
+viewGhostSquare : Logic.Game -> Team -> DragStuff -> Int -> Html Msg
+viewGhostSquare game playerColor dragStuff squareSize =
     case dragStuff of
         NoPieceInHand ->
             span [] []
@@ -584,8 +539,8 @@ getDragCoordinates { x, y, dragState } =
     ( x + endX - startX, y + endY - startY )
 
 
-viewSquare : Logic.Game -> List Position -> List Position -> Considering -> Team -> Position -> Html Msg
-viewSquare game reinforcing opponentReinforcing considering playerColor position =
+viewSquare : Logic.Game -> List Position -> List Position -> Team -> Position -> Html Msg
+viewSquare game reinforcing opponentReinforcing playerColor position =
     if game.turn == playerColor then
         case Dict.get (Position.toRaw position) game.occupiedSquares of
             Just piece ->
