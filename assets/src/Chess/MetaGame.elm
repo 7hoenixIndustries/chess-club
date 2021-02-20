@@ -166,7 +166,7 @@ update callbacks msg model =
                         | reinforcing =
                             reinforcingSquares
                                 { starting = startingPosition, current = currentPosition }
-                                (Logic.canMoveTo currentPosition model.game)
+                                (Logic.canAttack currentPosition model.game)
                                 model.game.moves
                       }
                     , Cmd.none

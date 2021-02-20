@@ -7,6 +7,7 @@ module Chess.Logic exposing
     , Square(..)
     , Team(..)
     , blankBoard
+    , canAttack
     , canMoveTo
     , findChecks
     , fromFen
@@ -184,20 +185,6 @@ castlingRightsOnCapture squareTo team castlingRights =
 
         ( _, _ ) ->
             castlingRights
-
-
-hasCastlingRights : Team -> List CastlingRight -> Bool
-hasCastlingRights team castlingRights =
-    List.any
-        (\castlingRight ->
-            case castlingRight of
-                AdvisorSide castlingRightTeam ->
-                    castlingRightTeam == team
-
-                MonarchSide castlingRightTeam ->
-                    castlingRightTeam == team
-        )
-        castlingRights
 
 
 makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting, rookEnding } =
@@ -422,7 +409,6 @@ pieceMovementToPath moveTo occupiedSquares occupied =
             []
 
         Just (Piece _ Monarch) ->
-            -- TODO: What should happen here?
             []
 
         Just (Piece team Advisor) ->
@@ -435,11 +421,9 @@ pieceMovementToPath moveTo occupiedSquares occupied =
             findPath moveTo occupiedSquares occupied team [] horizontalMovement
 
         Just (Piece team Knight) ->
-            -- TODO: Is this correct?
             []
 
         Just (Piece team Pawn) ->
-            -- TODO: Is this correct?
             []
 
 
@@ -480,6 +464,32 @@ doesNotLeadToCheck squareFrom squareTo game =
                     |> findChecks
                     |> List.isEmpty
            )
+
+
+canAttack : Position -> Game -> List Position
+canAttack moveTo ({ occupiedSquares, turn } as game) =
+    let
+        allOccupied =
+            Dict.keys occupiedSquares
+    in
+    List.filter (pieceCanAttack game moveTo occupiedSquares turn) allOccupied
+        |> List.map (\( x, y ) -> Position x y)
+
+
+pieceCanAttack : Game -> Position -> Dict ( Int, Int ) Piece -> Team -> ( Int, Int ) -> Bool
+pieceCanAttack game ((Position squareToColumn squareToRow) as moveTo) occupiedSquares turn occupied =
+    case Dict.get occupied occupiedSquares of
+        Nothing ->
+            False
+
+        Just piece ->
+            case piece of
+                Piece team Pawn ->
+                    -- TODO: don't really like how this is structured.
+                    pawnCanAttack game moveTo occupiedSquares occupied team
+
+                _ ->
+                    pieceCanMoveTo game moveTo occupiedSquares turn occupied
 
 
 canMoveTo : Position -> Game -> List Position
@@ -549,6 +559,24 @@ findCastlingMove game moveTo occupiedSquares occupied team castlingRight =
 
         MonarchSide White ->
             isValidCastlingRight White [ Position.d1, Position.c1 ] 2
+
+
+pawnCanAttack : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
+pawnCanAttack ({ enpassant } as game) moveTo occupiedSquares occupied team =
+    let
+        possibleAttacks =
+            case team of
+                Black ->
+                    -- Pawns attack diagonally.
+                    [ ( 1, -1 ), ( -1, -1 ) ]
+
+                White ->
+                    [ ( 1, 1 ), ( -1, 1 ) ]
+
+        possibleEnPassant =
+            List.filter (mayUseEnpassant occupied enpassant) possibleAttacks
+    in
+    canMoveToSingle game moveTo occupiedSquares occupied team (possibleAttacks ++ possibleEnPassant)
 
 
 pawnCanMoveTo : Game -> Position -> Dict ( Int, Int ) Piece -> ( Int, Int ) -> Team -> Bool
