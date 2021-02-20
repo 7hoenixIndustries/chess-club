@@ -1,6 +1,7 @@
 module Chess.Logic exposing
     ( CastlingRight(..)
     , Game
+    , MoveKey
     , Piece(..)
     , PieceType(..)
     , Square(..)
@@ -55,7 +56,7 @@ type alias Game =
     , turn : Team
     , enpassant : Maybe Position
     , castlingRights : List CastlingRight
-    , moves : List Move
+    , moves : Dict MoveKey Move
     }
 
 
@@ -243,14 +244,18 @@ asht (Occupied position piece) b =
     Dict.insert (positionToSquareKey position) piece b
 
 
+
+-- NOTE: MetaGame isn't using this (instead it is using the fromFen function below).
+
+
 init : List Square -> Team -> Maybe Position -> List CastlingRight -> Game
 init squares turn enpassant castlingRights =
-    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights []
+    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Dict.empty
 
 
 blankBoard : Game
 blankBoard =
-    Game Dict.empty Black Nothing [] []
+    Game Dict.empty Black Nothing [] Dict.empty
 
 
 
@@ -802,10 +807,10 @@ occupiedByFriendly piece team =
 fromFen : List Move -> String -> Result String Game
 fromFen moves fen =
     case String.split " " fen of
-        [ rawBoard, rawTurn, rawEnpassant, rawCastlingRights, e, f ] ->
+        [ rawBoard, rawTurn, rawCastlingRights, rawEnpassant, e, f ] ->
             Result.map4
                 (\board turn enpassant castlingRights ->
-                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights moves
+                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights (movesToDict moves)
                 )
                 (D.decodeValue boardDecoder (E.string rawBoard))
                 (D.decodeValue turnDecoder (E.string rawTurn))

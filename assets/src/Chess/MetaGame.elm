@@ -1,12 +1,10 @@
 module Chess.MetaGame exposing
     ( Callbacks
-    , Color
     , Model
     , Msg
-    , Piece
-    , PieceType
     , init
     , makeGame
+    , reinforcingSquares
     , subscriptions
     , update
     , view
@@ -103,43 +101,10 @@ type DragState
     = Moving Int Int Int Int
 
 
-
---type Game
---    = Game (Dict Position Piece) (List Move) (Dict MoveKey Move) Turn
-
-
-type Piece
-    = Piece Color PieceType
-
-
-type PieceType
-    = Monarch
-    | Advisor
-    | Rook
-    | Bishop
-    | Knight
-    | Pawn
-
-
-type Turn
-    = Turn Color
-
-
-type Color
-    = Black
-    | White
-
-
 type Considering
     = NotConsidering
     | HoveringOver Position
     | ConsideringMovingTo Position
-
-
-
---blankBoard : Game
---blankBoard =
---    Game Dict.empty [] Dict.empty (Turn Black)
 
 
 init : List Move -> String -> (Msg -> msg) -> ( Model, Cmd msg )
@@ -192,7 +157,20 @@ update callbacks msg model =
             ( { model | playerTeam = color }, Cmd.none )
 
         FindReinforcements currentPosition _ ->
-            ( { model | reinforcing = Logic.canMoveTo currentPosition model.game }, Cmd.none )
+            case model.dragStuff of
+                NoPieceInHand ->
+                    ( { model | reinforcing = [] }, Cmd.none )
+
+                PieceInHand { startingPosition } ->
+                    ( { model
+                        | reinforcing =
+                            reinforcingSquares
+                                { starting = startingPosition, current = currentPosition }
+                                (Logic.canMoveTo currentPosition model.game)
+                                model.game.moves
+                      }
+                    , Cmd.none
+                    )
 
         StartConsidering position ->
             ( { model | considering = ConsideringMovingTo position }, Cmd.none )
@@ -230,8 +208,7 @@ update callbacks msg model =
                                 }
                     in
                     ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game }
-                    , Cmd.none
-                      --, Task.attempt (callbacks.mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
+                    , Task.perform (callbacks.mapMsg << FindReinforcements startingPosition) (Task.succeed ())
                     )
 
                 PieceInHand _ ->
@@ -301,7 +278,7 @@ update callbacks msg model =
                             ( { model | game = placePiece startingPosition piece model.game }, Cmd.none )
 
                         Just finalPosition ->
-                            case friendlyMovesToPosition model.game.turn finalPosition startingPosition model.game.moves of
+                            case friendlyMovesToPosition model.game.turn finalPosition startingPosition (Dict.toList model.game.moves |> List.map Tuple.second) of
                                 move :: [] ->
                                     ( { model | game = placePiece finalPosition piece model.game }
                                     , Task.perform callbacks.makeMove (Task.succeed move)
@@ -343,13 +320,18 @@ update callbacks msg model =
 
    Will first ensure that the move is legal before finding reinforcements.
 -}
---calculateReinforcingSquares : Position -> Position -> Logic.Game -> List Move
---calculateReinforcingSquares startingPosition currentPosition game =
---    if Dict.member (toAlgebraic startingPosition ++ toAlgebraic currentPosition) legalMoves then
---        List.filter (\move -> movesToSquare currentPosition move && friendlyMoves turn move) moves
---
---    else
---        []
+
+
+reinforcingSquares : { starting : Position, current : Position } -> List Position -> Dict Logic.MoveKey Move -> List Position
+reinforcingSquares { starting, current } allMovesTo legalMoves =
+    if Dict.member (Position.toAlgebraic starting ++ Position.toAlgebraic current) legalMoves || starting == current then
+        allMovesTo
+
+    else
+        []
+
+
+
 -- GAME UPDATES
 
 
