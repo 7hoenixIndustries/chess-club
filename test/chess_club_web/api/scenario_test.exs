@@ -1,5 +1,7 @@
 defmodule ChessClubWeb.ScenarioTest do
   use ChessClubWeb.ConnCase
+  alias ChessClub.Repo
+  alias ChessClub.Learn.Move
 
   describe "create scenario" do
     test "creates a new scenario", %{authorized_conn: authorized_conn} do
@@ -291,7 +293,29 @@ defmodule ChessClubWeb.ScenarioTest do
              }
     end
 
-    # test "will not make a move if invalid", %{authorized_conn: authorized_conn} do
-    # end
+    test "will not make a move if invalid", %{authorized_conn: authorized_conn} do
+      starting_state = "7k/8/7K/8/7P/8/8/8 b - - 0 77"
+      scenario = Factory.insert(:scenario, %{starting_state: starting_state})
+      _ = Repo.insert!(%Move{move_command: "h8g8", scenario_id: scenario.id})
+
+      mutation = """
+      mutation {
+        makeMove(moveCommand: "h8g8", scenarioId: #{scenario.id}) {
+          currentState
+          id
+        }
+      }
+      """
+
+      response = post(authorized_conn, "/api/graphql", %{query: mutation})
+
+      get_message = fn m ->
+        [error | _] = Map.fetch!(m, "errors")
+        Map.fetch!(error, "message")
+      end
+
+      assert get_message.(json_response(response, 200)) ==
+               "makeMove failed. It could be out of sync."
+    end
   end
 end
