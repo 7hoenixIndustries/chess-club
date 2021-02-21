@@ -549,7 +549,7 @@ viewSquare game reinforcing opponentReinforcing playerColor position =
                         [ ( "w-full h-full m-0", True )
                         , ( "bg-green-500", reinforces position reinforcing )
                         , ( "bg-yellow-500", reinforces position opponentReinforcing )
-                        , ( "bg-yellow-300 border-4 border-black", isRecentMove position game.recentMove )
+                        , ( "bg-gray-400 bg-opacity-50 border-4 border-black", isRecentMove position game.recentMove )
                         , ( "transition", True )
                         , ( Position.toAlgebraic position, True )
                         ]
@@ -562,7 +562,7 @@ viewSquare game reinforcing opponentReinforcing playerColor position =
                 div
                     [ classList
                         [ ( "w-full h-full m-0", True )
-                        , ( "bg-yellow-300 border-4 border-black", isRecentMove position game.recentMove )
+                        , ( "bg-gray-400 bg-opacity-50 border-4 border-black", isRecentMove position game.recentMove )
                         ]
                     ]
                     []
@@ -607,7 +607,7 @@ shading column row =
         "bg-gray-200"
 
     else
-        "bg-green-200"
+        "bg-indigo-400"
 
 
 
