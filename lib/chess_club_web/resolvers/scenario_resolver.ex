@@ -40,15 +40,19 @@ defmodule ChessClubWeb.ScenarioResolver do
   end
 
   def make_move(_root, args, _info) do
-    {:ok, _} = %Move{} |> Move.changeset(args) |> Repo.insert()
+    case %Move{} |> Move.changeset(args) |> Repo.insert() do
+      {:ok, _} ->
+        scenario_with_state_and_moves =
+          Scenario
+          |> ChessClub.Repo.get(args.scenario_id)
+          |> ChessClub.Repo.preload(:moves)
+          |> enrich_scenario()
 
-    scenario_with_state_and_moves =
-      Scenario
-      |> ChessClub.Repo.get(args.scenario_id)
-      |> ChessClub.Repo.preload(:moves)
-      |> enrich_scenario()
+        {:ok, scenario_with_state_and_moves}
 
-    {:ok, scenario_with_state_and_moves}
+      {:error, _errors} ->
+        {:error, "makeMove failed. It could be out of sync."}
+    end
   end
 
   defp enrich_scenario(scenario) do

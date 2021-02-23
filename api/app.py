@@ -6,7 +6,19 @@ def route_moves_erlport(event):
     as_json = json.loads(event)
     return json.dumps(moves(as_json["board"], as_json["moves_made"]))
 
+def legal_move(event):
+    as_json = json.loads(event)
+    return json.dumps(is_legal(as_json["board"], as_json["moves_made"], as_json["move"]))
+
 # MOVES
+
+def is_legal(board, moves_made, move):
+    chess_board = chess.Board(board)
+    for m in moves_made:
+        chess_board.push(chess.Move.from_uci(m))
+    return {
+        "is_legal": chess.Move.from_uci(move) in chess_board.legal_moves
+    }
 
 def moves(board, moves_made):
     chess_board = chess.Board(board)

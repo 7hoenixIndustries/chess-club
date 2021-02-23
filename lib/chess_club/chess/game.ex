@@ -20,6 +20,10 @@ defmodule ChessClub.Chess.Game do
     GenServer.call(server, {:available_moves, %{fen: fen, moves_made: moves_made}})
   end
 
+  def legal_move(server, fen, moves_made, move) do
+    GenServer.call(server, {:legal_move, %{fen: fen, moves_made: moves_made, move: move}})
+  end
+
   ## SERVER
 
   @impl GenServer
@@ -38,6 +42,17 @@ defmodule ChessClub.Chess.Game do
     %{moves: moves, current_state: current_state} = extract_response(body)
 
     {:reply, {Enum.map(moves, &to_move/1), current_state}, %{chess_server: server}}
+  end
+
+  def handle_call({:legal_move, %{fen: fen, moves_made: moves_made, move: move}}, _from, %{
+        chess_server: server
+      }) do
+    {:ok, request_body} = Poison.encode(%{board: fen, moves_made: moves_made, move: move})
+
+    %{"is_legal" => is_legal} =
+      Poison.decode!(:python.call(server, :app, :legal_move, [request_body]))
+
+    {:reply, %{is_legal: is_legal}, %{chess_server: server}}
   end
 
   defp extract_response(body) do
