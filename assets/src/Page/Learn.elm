@@ -46,7 +46,7 @@ type SubscriptionStatus
 type Scenarios
     = Failure
     | Loading
-    | Success (List Scenario.ScenarioSeed)
+    | Success (List Scenario.Scenario2)
 
 
 init : Backend -> Session.Data -> ( Model, Cmd Msg )
@@ -110,8 +110,8 @@ update backend msg model =
 
                 Ok scenarios ->
                     ( { model
-                        | scenarios = Success scenarios
-                        , session = Session.addScenarios scenarios model.session
+                        | scenarios = Success (List.map Scenario.Seed scenarios)
+                        , session = Session.addScenarios (List.map Scenario.Seed scenarios) model.session
                       }
                     , Cmd.none
                     )
@@ -126,7 +126,7 @@ update backend msg model =
                 Ok scenario ->
                     let
                         ( chessModel, chessMsg ) =
-                            Chess.init scenario.availableMoves scenario.currentState ChessMsg
+                            Chess.init scenario.availableMoves scenario.currentState scenario.recentMove ChessMsg
                     in
                     -- TODO: chessModel is directly dependent on scenario. . . are we able to combine these somehow?
                     ( { model
@@ -162,7 +162,7 @@ update backend msg model =
                 Ok id ->
                     case model.scenarios of
                         Success scenarios ->
-                            ( { model | scenarios = Success <| scenarios ++ [ Scenario.ScenarioSeed id ] }, Scenario.getScenario backend id GotScenario )
+                            ( { model | scenarios = Success <| scenarios ++ [ Scenario.Seed <| Scenario.ScenarioSeed id ] }, Scenario.getScenario backend id GotScenario )
 
                         -- This state should not be possible (assuming we aren't able to click the create button unless we are loaded.
                         _ ->
@@ -180,7 +180,7 @@ update backend msg model =
                         Ok s ->
                             ( { model
                                 | scenario = Just s
-                                , chessModel = Maybe.map (\chessModel -> { chessModel | game = Chess.makeGame s.availableMoves s.currentState }) model.chessModel
+                                , chessModel = Maybe.map (\chessModel -> { chessModel | game = Chess.makeGame s.availableMoves s.currentState s.recentMove }) model.chessModel
                               }
                             , Cmd.none
                             )
@@ -253,15 +253,26 @@ viewScenarios scenarios =
         ]
 
 
-viewSelectScenario : Scenario.ScenarioSeed -> Html Msg
-viewSelectScenario { id } =
-    let
-        (Api.Scalar.Id raw) =
-            id
-    in
-    div []
-        [ button [ onClick (GetScenario id) ] [ text raw ]
-        ]
+viewSelectScenario : Scenario.Scenario2 -> Html Msg
+viewSelectScenario scenario =
+    case scenario of
+        Scenario.Seed { id } ->
+            let
+                (Api.Scalar.Id raw) =
+                    id
+            in
+            div []
+                [ button [ onClick (GetScenario id) ] [ text raw ]
+                ]
+
+        Scenario.Loaded s ->
+            let
+                (Api.Scalar.Id raw) =
+                    s.id
+            in
+            div []
+                [ button [ onClick (GotScenario (Ok s)) ] [ text raw ]
+                ]
 
 
 

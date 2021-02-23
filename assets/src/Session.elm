@@ -13,7 +13,7 @@ import Page.Learn.Scenario as Scenario
 
 
 type alias Data =
-    { scenarios : Maybe (List Scenario.ScenarioSeed)
+    { scenarios : Maybe (List Scenario.Scenario2)
     }
 
 
@@ -26,11 +26,11 @@ empty =
 -- SCENARIOS
 
 
-getScenarios : Data -> Maybe (List Scenario.ScenarioSeed)
+getScenarios : Data -> Maybe (List Scenario.Scenario2)
 getScenarios data =
     data.scenarios
 
 
-addScenarios : List Scenario.ScenarioSeed -> Data -> Data
+addScenarios : List Scenario.Scenario2 -> Data -> Data
 addScenarios scenarios data =
     { data | scenarios = Just scenarios }

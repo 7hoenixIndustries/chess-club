@@ -67,7 +67,7 @@ viewBody toMsg details =
 
 viewHeader : List Segment -> Html msg
 viewHeader segments =
-    div [ class "header container mx-auto w-full h-10 bg-green-200 " ]
+    div [ class "header container mx-auto w-full h-10 bg-indigo-400 " ]
         [ div [ class "nav" ]
             [ case segments of
                 [] ->
