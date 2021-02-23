@@ -1,7 +1,7 @@
 defmodule ChessClubWeb.ScenarioTest do
   use ChessClubWeb.ConnCase
-  alias ChessClub.Repo
   alias ChessClub.Learn.Move
+  alias ChessClub.Repo
 
   describe "create scenario" do
     test "creates a new scenario", %{authorized_conn: authorized_conn} do

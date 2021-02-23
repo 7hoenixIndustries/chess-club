@@ -26,7 +26,8 @@ defmodule ChessClub.Learn.Move do
   def validate_legal(changeset, _) do
     case changeset.changes do
       %{move_command: move_command, scenario_id: scenario_id} ->
-        Repo.get(Scenario, scenario_id)
+        Scenario
+        |> Repo.get(scenario_id)
         |> Repo.preload([:moves])
         |> validate_legal_inner(changeset, move_command)
     end

@@ -50,8 +50,7 @@ defmodule ChessClub.Chess.Game do
     {:ok, request_body} = Poison.encode(%{board: fen, moves_made: moves_made, move: move})
 
     %{"is_legal" => is_legal} =
-      :python.call(server, :app, :legal_move, [request_body])
-      |> Poison.decode!()
+      Poison.decode!(:python.call(server, :app, :legal_move, [request_body]))
 
     {:reply, %{is_legal: is_legal}, %{chess_server: server}}
   end

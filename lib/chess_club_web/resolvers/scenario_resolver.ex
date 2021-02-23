@@ -50,7 +50,7 @@ defmodule ChessClubWeb.ScenarioResolver do
 
         {:ok, scenario_with_state_and_moves}
 
-      {:error, errors} ->
+      {:error, _errors} ->
         {:error, "makeMove failed. It could be out of sync."}
     end
   end
