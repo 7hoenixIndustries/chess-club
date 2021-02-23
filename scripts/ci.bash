@@ -29,7 +29,7 @@ function _dialyzer() {
 
 function _mix_test() {
   echo "======Mix Test======"
-  mix test.once
+  mix test
   _print_success
 }
 
