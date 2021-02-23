@@ -109,7 +109,8 @@ init availableMoves currentState recentMove mapMsg =
     in
     ( Model game Logic.Black [] [] NoPieceInHand Nothing Nothing
     , Cmd.batch
-        [ Task.attempt (mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
+        [ -- TODO: Make the square size be dynamic based on BrowserBoard so that this may go away.
+          Task.attempt (mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
         , Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
         ]
     )
@@ -152,6 +153,7 @@ type Msg
     | MakeMoveIfDragIsOnBoard DragStuffInner (Result Browser.Dom.Error Browser.Dom.Element)
     | SetSquareSize (Result Browser.Dom.Error Browser.Dom.Element)
     | StoreCopyOfBrowserBoard (Result Browser.Dom.Error Browser.Dom.Element)
+    | WindowResized
 
 
 
@@ -311,6 +313,14 @@ update callbacks msg model =
 
                 Ok boardElement ->
                     ( { model | browserBoard = Just boardElement }, Cmd.none )
+
+        WindowResized ->
+            ( model
+            , Cmd.batch
+                [ Task.attempt (callbacks.mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
+                , Task.attempt (callbacks.mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
+                ]
+            )
 
 
 
@@ -765,12 +775,15 @@ svgWithViewPort =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case model.dragStuff of
-        NoPieceInHand ->
-            Sub.none
+    Sub.batch
+        [ case model.dragStuff of
+            NoPieceInHand ->
+                Sub.none
 
-        PieceInHand _ ->
-            onMouseMove (D.map2 MoveDragging pageX pageY)
+            PieceInHand _ ->
+                onMouseMove (D.map2 MoveDragging pageX pageY)
+        , Browser.Events.onResize (\w h -> WindowResized)
+        ]
 
 
 pageX : D.Decoder Int

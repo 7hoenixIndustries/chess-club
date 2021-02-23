@@ -186,6 +186,7 @@ update backend msg model =
                             )
 
                         Err error ->
+                            -- TODO: Display error so they know to refresh.
                             ( model, Cmd.none )
 
                 Nothing ->
