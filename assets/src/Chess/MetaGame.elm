@@ -39,7 +39,7 @@ import Html.Lazy exposing (lazy, lazy2, lazy3, lazy4, lazy5, lazy6, lazy7)
 import Json.Decode as D
 import Json.Encode as E
 import List.Extra
-import Page.Learn.Scenario exposing (Move)
+import Page.Learn.Scenario exposing (Move, RecentMove(..))
 import Prelude
 import Svg exposing (Svg, circle, g, svg)
 import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y)
@@ -101,7 +101,7 @@ type DragState
     = Moving Int Int Int Int
 
 
-init : List Move -> String -> Maybe String -> (Msg -> msg) -> ( Model, Cmd msg )
+init : List Move -> String -> Maybe RecentMove -> (Msg -> msg) -> ( Model, Cmd msg )
 init availableMoves currentState recentMove mapMsg =
     let
         game =
@@ -112,18 +112,19 @@ init availableMoves currentState recentMove mapMsg =
         [ -- TODO: Make the square size be dynamic based on BrowserBoard so that this may go away.
           Task.attempt (mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
         , Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
+        , Prelude.maybe Cmd.none (\recent -> Task.perform (mapMsg << AnimateRecentMove) (Task.succeed recent)) recentMove
         ]
     )
 
 
-makeGame : List Move -> String -> Maybe String -> Logic.Game
+makeGame : List Move -> String -> Maybe RecentMove -> Logic.Game
 makeGame availableMoves currentState recentMove =
     case recentMove of
         Nothing ->
             Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState Nothing
 
-        Just r ->
-            case String.toList r of
+        Just (RecentMove { moveCommand }) ->
+            case String.toList moveCommand of
                 [ a, b, c, d ] ->
                     (Result.map2
                         Logic.BasicMove
@@ -143,7 +144,8 @@ makeGame availableMoves currentState recentMove =
 
 
 type Msg
-    = ChangeTeam Team
+    = AnimateRecentMove RecentMove
+    | ChangeTeam Team
     | FindReinforcements Position ()
     | MakeMove Move
       -- Drag And Drop
@@ -163,6 +165,9 @@ type Msg
 update : Callbacks msg -> Msg -> Model -> ( Model, Cmd msg )
 update callbacks msg model =
     case msg of
+        AnimateRecentMove recentMove ->
+            ( model, Cmd.none )
+
         ChangeTeam color ->
             ( { model | playerTeam = color }, Cmd.none )
 

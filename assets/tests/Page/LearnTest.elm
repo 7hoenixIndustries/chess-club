@@ -4,7 +4,7 @@ import Api.Scalar exposing (Id(..))
 import Backend exposing (Backend)
 import Chess.Position as Position exposing (Position)
 import Page.Learn as Learn
-import Page.Learn.Scenario as Scenario
+import Page.Learn.Scenario as Scenario exposing (RecentMove(..))
 import Prelude
 import ProgramTest exposing (ProgramTest, clickButton, ensureViewHas, ensureViewHasNot, expectViewHas, fillIn, simulateDomEvent, update)
 import Skeleton
@@ -24,7 +24,7 @@ backend =
 
 
 loadedData =
-    { scenarios = Just [ Scenario.Loaded <| Scenario.Scenario [] "8/8/8/8/2p5/r3k3/8/R3K3 b - - 1 77" (Just "a1a2") (Id "1") ]
+    { scenarios = Just [ Scenario.Loaded <| Scenario.Scenario [] "8/8/8/8/2p5/r3k3/8/R3K3 b - - 1 77" (Just <| RecentMove { moveCommand = "a1a2", recentFen = "" }) (Id "1") ]
     }
 
 

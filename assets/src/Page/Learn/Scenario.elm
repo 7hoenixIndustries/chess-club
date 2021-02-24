@@ -1,5 +1,6 @@
 module Page.Learn.Scenario exposing
     ( Move
+    , RecentMove(..)
     , Scenario
     , Scenario2(..)
     , ScenarioSeed
@@ -15,6 +16,7 @@ module Page.Learn.Scenario exposing
 import Api.Mutation as Mutation
 import Api.Object
 import Api.Object.Move
+import Api.Object.RecentMove
 import Api.Object.Scenario exposing (availableMoves, currentState, id, recentMove)
 import Api.Query exposing (scenario, scenarios)
 import Api.Scalar exposing (Id(..))
@@ -37,9 +39,13 @@ type Scenario2
 type alias Scenario =
     { availableMoves : List Move
     , currentState : String
-    , recentMove : Maybe String
+    , recentMove : Maybe RecentMove
     , id : Id
     }
+
+
+type RecentMove
+    = RecentMove { recentFen : String, moveCommand : String }
 
 
 scenarioQuery : Id -> SelectionSet Scenario RootQuery
@@ -52,8 +58,15 @@ scenarioSelection =
     SelectionSet.map4 Scenario
         (availableMoves moveSelection)
         currentState
-        recentMove
+        (recentMove recentMoveSelection)
         id
+
+
+recentMoveSelection : SelectionSet RecentMove Api.Object.RecentMove
+recentMoveSelection =
+    SelectionSet.succeed (\a b -> RecentMove { recentFen = a, moveCommand = b })
+        |> with Api.Object.RecentMove.fenBeforeMove
+        |> with Api.Object.RecentMove.recentMoveCommand
 
 
 getScenario : Backend -> Id -> (Result (Graphql.Http.Error Scenario) Scenario -> msg) -> Cmd msg
