@@ -1,21 +1,23 @@
 module Chess.Logic exposing
-    ( BasicMove
-    , CastlingRight(..)
+    ( CastlingRight(..)
     , Game
     , MoveKey
     , Piece(..)
     , PieceType(..)
     , Square(..)
     , Team(..)
+    , addPiece
     , blankBoard
     , canAttack
     , canMoveTo
     , findChecks
+    , findVectors
     , fromFen
     , init
     , isCheckmate
     , makeMove
     , nextTurn
+    , popPiece
     , removePiece
     )
 
@@ -23,7 +25,7 @@ import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
 import Json.Decode as D
 import Json.Encode as E
-import Page.Learn.Scenario exposing (Move)
+import Page.Learn.Scenario exposing (Move, PreviousMovesSafe)
 import Set exposing (Set)
 
 
@@ -60,13 +62,10 @@ type alias Game =
     , turn : Team
     , enpassant : Maybe Position
     , castlingRights : List CastlingRight
-    , recentMove : Maybe BasicMove
     , moves : Dict MoveKey Move
+    , movesByPosition : Dict PositionKey (List Move)
+    , rawFen : String
     }
-
-
-type alias BasicMove =
-    { from : Position, to : Position }
 
 
 type CastlingRight
@@ -74,19 +73,14 @@ type CastlingRight
     | AdvisorSide Team
 
 
+{-| Make a move on the board.
 
-{-
+NOTE: This function does NOT apply any restrictive game logic. It assumes that whatever is being sent is valid.
 
-   Make a move on the board.
-
-   NOTE: This function does NOT apply any restrictive game logic. It assumes that whatever is being sent is valid.
-
-   To ensure that you do not end up in a bad state you should first call: `canMoveTo` to find out validMoves and only then
-   call this function to execute one of the moves returned.
+To ensure that you do not end up in a bad state you should first call: `canMoveTo` to find out validMoves and only then
+call this function to execute one of the moves returned.
 
 -}
-
-
 makeMove : ( Int, Int ) -> ( Int, Int ) -> Game -> Game
 makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant, castlingRights } as game) =
     case Dict.get squareFrom occupiedSquares of
@@ -182,6 +176,34 @@ removePiece square ({ occupiedSquares } as game) =
         |> (\updatedSquares -> { game | occupiedSquares = updatedSquares })
 
 
+popPiece square ({ occupiedSquares } as game) =
+    let
+        piece =
+            Dict.get (Position.toRaw square) occupiedSquares
+    in
+    Dict.remove (Position.toRaw square) occupiedSquares
+        |> (\updatedSquares -> { game | occupiedSquares = updatedSquares })
+        |> Tuple.pair piece
+
+
+addPiece piece square ({ occupiedSquares } as game) =
+    Dict.insert (Position.toRaw square) piece occupiedSquares
+        |> (\updatedSquares -> { game | occupiedSquares = updatedSquares })
+
+
+findVectors position position2 team =
+    let
+        ( columnDelta, rowDelta ) =
+            Position.compare position position2
+    in
+    case team of
+        Black ->
+            ( negate columnDelta, rowDelta )
+
+        White ->
+            ( columnDelta, negate rowDelta )
+
+
 castlingRightsOnCapture squareTo team castlingRights =
     case ( squareTo, opponentTurn team ) of
         ( ( 8, 8 ), Black ) ->
@@ -250,12 +272,12 @@ asht (Occupied position piece) b =
 
 init : List Square -> Team -> Maybe Position -> List CastlingRight -> Game
 init squares turn enpassant castlingRights =
-    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Nothing Dict.empty
+    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Dict.empty Dict.empty ""
 
 
 blankBoard : Game
 blankBoard =
-    Game Dict.empty Black Nothing [] Nothing Dict.empty
+    Game Dict.empty Black Nothing [] Dict.empty Dict.empty ""
 
 
 
@@ -850,13 +872,13 @@ occupiedByFriendly piece team =
 -- SERIALIZATION
 
 
-fromFen : List Move -> String -> Maybe BasicMove -> Result String Game
-fromFen moves fen recentMove =
+fromFen : List Move -> String -> Result String Game
+fromFen moves fen =
     case String.split " " fen of
         [ rawBoard, rawTurn, rawCastlingRights, rawEnpassant, e, f ] ->
             Result.map4
                 (\board turn enpassant castlingRights ->
-                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights recentMove (movesToDict moves)
+                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights (movesToDict moves) (movesDict moves) fen
                 )
                 (D.decodeValue boardDecoder (E.string rawBoard))
                 (D.decodeValue turnDecoder (E.string rawTurn))
@@ -884,6 +906,18 @@ moveKey { squareFrom, squareTo } =
 
 
 type alias MoveKey =
+    String
+
+
+{-| squareTo => [movesToIt]
+-}
+movesDict : List Move -> Dict PositionKey (List Move)
+movesDict moves =
+    List.map (\pos -> ( Position.toAlgebraic pos, List.filter (\m -> m.squareTo == Position.toAlgebraic pos) moves )) Position.all
+        |> Dict.fromList
+
+
+type alias PositionKey =
     String
 
 

@@ -1,5 +1,9 @@
 module Page.Learn.Scenario exposing
-    ( Move
+    ( BasicMove(..)
+    , Fen(..)
+    , Move
+    , MoveCommand(..)
+    , PreviousMovesSafe(..)
     , Scenario
     , Scenario2(..)
     , ScenarioSeed
@@ -15,18 +19,24 @@ module Page.Learn.Scenario exposing
 import Api.Mutation as Mutation
 import Api.Object
 import Api.Object.Move
-import Api.Object.Scenario exposing (availableMoves, currentState, id, recentMove)
+import Api.Object.MovePlayed
+import Api.Object.Scenario exposing (availableMoves, currentState, id, movesPlayed)
 import Api.Query exposing (scenario, scenarios)
 import Api.Scalar exposing (Id(..))
 import Api.Subscription as Subscription
 import Backend exposing (Backend)
+import Chess.Position as Position exposing (Position)
 import Graphql.Http exposing (Request)
 import Graphql.Operation exposing (RootMutation, RootQuery, RootSubscription)
 import Graphql.SelectionSet as SelectionSet exposing (SelectionSet, list, with)
+import Json.Decode as D
+import Json.Encode as E
+import Result.Extra
 
 
 
 -- SCENARIO
+-- TODO: Lock this down.
 
 
 type Scenario2
@@ -36,10 +46,28 @@ type Scenario2
 
 type alias Scenario =
     { availableMoves : List Move
-    , currentState : String
-    , recentMove : Maybe String
+    , currentState : Fen
+    , previousMoves : PreviousMovesSafe
     , id : Id
     }
+
+
+{-| Moves that have been played with list of tuples with the command and corresponding fen that comes up afterwards.
+-}
+type PreviousMovesSafe
+    = PreviousMovesSafe (List ( BasicMove, Fen ))
+
+
+type Fen
+    = Fen String
+
+
+type MoveCommand
+    = MoveCommand String
+
+
+type BasicMove
+    = BasicMove { from : Position, to : Position }
 
 
 scenarioQuery : Id -> SelectionSet Scenario RootQuery
@@ -51,9 +79,43 @@ scenarioSelection : SelectionSet Scenario Api.Object.Scenario
 scenarioSelection =
     SelectionSet.map4 Scenario
         (availableMoves moveSelection)
-        currentState
-        recentMove
+        (SelectionSet.map Fen currentState)
+        movesPlayedSelection
         id
+
+
+mPS mp =
+    let
+        moveNonNull : ( MoveCommand, Fen ) -> Result String ( BasicMove, Fen )
+        moveNonNull ( MoveCommand mc, fen ) =
+            case String.toList mc of
+                [ a, b, c, d ] ->
+                    (Result.map2
+                        (\from to -> BasicMove { from = from, to = to })
+                        (D.decodeValue Position.decoder (E.string (String.fromList [ a, b ])))
+                        (D.decodeValue Position.decoder (E.string (String.fromList [ c, d ])))
+                        |> Result.mapError (\_ -> "Not a valid move")
+                    )
+                        |> Result.map (\basicMove -> ( basicMove, fen ))
+
+                _ ->
+                    Err "Unhandled move variant!"
+    in
+    Result.Extra.combine (List.map moveNonNull mp)
+        |> Result.andThen (\foo -> Ok (PreviousMovesSafe foo))
+
+
+movesPlayedSelection : SelectionSet PreviousMovesSafe Api.Object.Scenario
+movesPlayedSelection =
+    SelectionSet.mapOrFail mPS
+        (movesPlayed movePlayedSelection)
+
+
+movePlayedSelection : SelectionSet ( MoveCommand, Fen ) Api.Object.MovePlayed
+movePlayedSelection =
+    SelectionSet.succeed (\rawPrevious rawFen -> Tuple.pair (MoveCommand rawPrevious) (Fen rawFen))
+        |> with Api.Object.MovePlayed.previousMove
+        |> with Api.Object.MovePlayed.fenAfterMove
 
 
 getScenario : Backend -> Id -> (Result (Graphql.Http.Error Scenario) Scenario -> msg) -> Cmd msg

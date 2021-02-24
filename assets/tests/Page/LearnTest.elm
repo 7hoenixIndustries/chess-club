@@ -4,7 +4,7 @@ import Api.Scalar exposing (Id(..))
 import Backend exposing (Backend)
 import Chess.Position as Position exposing (Position)
 import Page.Learn as Learn
-import Page.Learn.Scenario as Scenario
+import Page.Learn.Scenario as Scenario exposing (Fen(..), PreviousMovesSafe(..))
 import Prelude
 import ProgramTest exposing (ProgramTest, clickButton, ensureViewHas, ensureViewHasNot, expectViewHas, fillIn, simulateDomEvent, update)
 import Skeleton
@@ -14,17 +14,13 @@ import Test.Html.Query as Query
 import Test.Html.Selector as Selector exposing (text)
 
 
-initialStartingState =
-    "some-fen-string"
-
-
 backend : Backend
 backend =
     Backend.api "http://foo.bar" "some-auth-token"
 
 
 loadedData =
-    { scenarios = Just [ Scenario.Loaded <| Scenario.Scenario [] "8/8/8/8/2p5/r3k3/8/R3K3 b - - 1 77" (Just "a1a2") (Id "1") ]
+    { scenarios = Just [ Scenario.Loaded <| Scenario.Scenario [] (Fen "8/8/8/8/2p5/r3k3/8/R3K3 b - - 1 77") (PreviousMovesSafe []) (Id "1") ]
     }
 
 

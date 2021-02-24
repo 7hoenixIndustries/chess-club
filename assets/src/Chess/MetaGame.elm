@@ -4,6 +4,7 @@ module Chess.MetaGame exposing
     , Msg
     , init
     , makeGame
+    , moveMade
     , reinforcingSquares
     , subscriptions
     , update
@@ -29,21 +30,24 @@ module Chess.MetaGame exposing
 
 import Browser.Dom
 import Browser.Events exposing (onMouseMove)
-import Chess.Logic as Logic exposing (Team)
+import Chess.Logic as Logic exposing (Piece, Team)
 import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
-import Html exposing (Attribute, Html, div, fieldset, input, label, span, text)
+import Html exposing (Attribute, Html, button, div, fieldset, input, label, span, text)
 import Html.Attributes exposing (checked, class, classList, name, type_)
 import Html.Events exposing (on, onClick, onInput, onMouseDown, onMouseLeave, onMouseOver)
-import Html.Lazy exposing (lazy, lazy2, lazy3, lazy4, lazy5, lazy6, lazy7)
+import Html.Lazy exposing (lazy, lazy2, lazy3, lazy4, lazy5, lazy6, lazy7, lazy8)
 import Json.Decode as D
-import Json.Encode as E
 import List.Extra
-import Page.Learn.Scenario exposing (Move)
+import Page.Learn.Scenario exposing (BasicMove(..), Fen(..), Move, MoveCommand, PreviousMovesSafe(..))
 import Prelude
+import Process
+import Simple.Animation as Animation exposing (Animation)
+import Simple.Animation.Animated as Animated
+import Simple.Animation.Property as P
 import Svg exposing (Svg, circle, g, svg)
-import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y)
-import Task
+import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y, z)
+import Task exposing (Task)
 
 
 
@@ -67,19 +71,50 @@ type alias Callbacks msg =
 
 
 type alias Model =
-    { game : Logic.Game
+    { game : AnimatedGame
+    , movesHistorical : Historical
     , playerTeam : Team
     , reinforcing : List Position
     , opponentReinforcing : List Position
     , dragStuff : DragStuff
+    , previousMove : Maybe BasicMoveWithPieces
 
     -- TODO: Bleh. Do not like the direct dependency on Browser.Dom.Element
     -- Also that its a maybe.
     , browserBoard : Maybe Browser.Dom.Element
+    , madeMoveRecently : Bool
+    , openingState : Fen
 
     -- responsive : Responsive
-    , squareSize : Maybe Int
     }
+
+
+type AnimatedGame
+    = Animating { before : Logic.Game, after : Logic.Game }
+    | DoneAnimating Logic.Game
+
+
+
+-- STEPS to make this work with the simple animation library
+-- [X] "normal moves" on init. Remove piece from board and show it.
+-- [X] When picking up a piece and then putting it back. . . have it return with the updated board (not the animation one)
+-- [X] captures: if piece in 'to' square. . . have it fade out opacity.
+-- [X] FIX turn post animation.
+-- [X] FIX background color on animation.
+-- [X] IF you made the move do not show the animation when moveMade is called.
+-- [X] IF you didn't, then do.
+-- [X] FIX changeTeam to redo animation
+-- [] Add click handler for animation piece
+-- [] Castling. . . find both and handle.
+-- [] en passant . . . remove with opacity
+
+
+type Historical
+    = Historical (List ( BasicMove, Fen ))
+
+
+type BasicMoveWithPieces
+    = BasicMoveWithPieces { from : Position, to : Position, pieceMoved : Logic.Piece, pieceCaptured : Maybe Logic.Piece }
 
 
 type DragStuff
@@ -101,41 +136,120 @@ type DragState
     = Moving Int Int Int Int
 
 
-init : List Move -> String -> Maybe String -> (Msg -> msg) -> ( Model, Cmd msg )
-init availableMoves currentState recentMove mapMsg =
+init : List Move -> Fen -> PreviousMovesSafe -> (Msg -> msg) -> ( Model, Cmd msg )
+init availableMoves currentState (PreviousMovesSafe pm) mapMsg =
     let
-        game =
-            makeGame availableMoves currentState recentMove
+        previousMoves =
+            List.reverse pm
+
+        ( game, basicMoveWithPieces ) =
+            case previousMoves of
+                [] ->
+                    -- Opening Move
+                    ( DoneAnimating <| makeGame availableMoves currentState, Nothing )
+
+                ( basicMove, fenAfterMove ) :: [] ->
+                    case makeGameForAnimating availableMoves currentState basicMove of
+                        Ok ( g, bMWP ) ->
+                            ( Animating { before = g, after = makeGame availableMoves fenAfterMove }
+                            , Just bMWP
+                            )
+
+                        Err _ ->
+                            ( DoneAnimating Logic.blankBoard, Nothing )
+
+                ( basicMove, fenAfterMove ) :: ( _, currentFen ) :: _ ->
+                    case makeGameForAnimating availableMoves currentFen basicMove of
+                        Ok ( g, bMWP ) ->
+                            ( Animating { before = g, after = makeGame availableMoves fenAfterMove }
+                            , Just bMWP
+                            )
+
+                        Err _ ->
+                            ( DoneAnimating Logic.blankBoard, Nothing )
     in
-    ( Model game Logic.Black [] [] NoPieceInHand Nothing Nothing
+    ( Model game (Historical previousMoves) Logic.Black [] [] NoPieceInHand basicMoveWithPieces Nothing False currentState
     , Cmd.batch
-        [ -- TODO: Make the square size be dynamic based on BrowserBoard so that this may go away.
-          Task.attempt (mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
-        , Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
+        [ Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
         ]
     )
 
 
-makeGame : List Move -> String -> Maybe String -> Logic.Game
-makeGame availableMoves currentState recentMove =
-    case recentMove of
-        Nothing ->
-            Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState Nothing
+makeGameForAnimating : List Move -> Fen -> BasicMove -> Result String ( Logic.Game, BasicMoveWithPieces )
+makeGameForAnimating availableMoves (Fen currentState) (BasicMove { from, to }) =
+    let
+        g =
+            Logic.fromFen availableMoves currentState
+    in
+    case g of
+        Ok gg ->
+            case Logic.popPiece from gg of
+                ( Just p, ggg ) ->
+                    case Logic.popPiece to ggg of
+                        ( pieceTo, gggg ) ->
+                            Ok ( Logic.nextTurn gggg, BasicMoveWithPieces { from = from, to = to, pieceMoved = p, pieceCaptured = pieceTo } )
 
-        Just r ->
-            case String.toList r of
-                [ a, b, c, d ] ->
-                    (Result.map2
-                        Logic.BasicMove
-                        (D.decodeValue Position.decoder (E.string (String.fromList [ a, b ])))
-                        (D.decodeValue Position.decoder (E.string (String.fromList [ c, d ])))
-                        |> Result.mapError (\_ -> "Not a valid move")
-                    )
-                        |> Result.andThen (\basicMove -> Logic.fromFen availableMoves currentState (Just basicMove))
-                        |> Result.withDefault Logic.blankBoard
+                ( Nothing, _ ) ->
+                    Err "no piece found in move"
 
-                _ ->
-                    Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState Nothing
+        Err fenParsingFailure ->
+            Err fenParsingFailure
+
+
+makeGame : List Move -> Fen -> Logic.Game
+makeGame availableMoves (Fen currentState) =
+    Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState
+
+
+moveMade : List Move -> PreviousMovesSafe -> (Msg -> msg) -> Model -> ( Model, Cmd msg )
+moveMade availableMoves (PreviousMovesSafe pm) mapMsg model =
+    moveMadeWithAnimation availableMoves (Historical <| List.reverse pm) mapMsg model
+
+
+moveMadeWithAnimation : List Move -> Historical -> (Msg -> msg) -> Model -> ( Model, Cmd msg )
+moveMadeWithAnimation availableMoves (Historical pm) toMsg model =
+    let
+        ( game, basicMoveWithPieces ) =
+            case pm of
+                [] ->
+                    -- Opening Move shouldn't be possible from this moveMade function.
+                    ( DoneAnimating Logic.blankBoard, Nothing )
+
+                ( basicMove, fenAfterMove ) :: [] ->
+                    case makeGameForAnimating availableMoves model.openingState basicMove of
+                        Ok ( g, bMWP ) ->
+                            if model.madeMoveRecently then
+                                ( DoneAnimating <| makeGame availableMoves fenAfterMove
+                                , Nothing
+                                )
+
+                            else
+                                ( Animating { before = g, after = makeGame availableMoves fenAfterMove }
+                                , Just bMWP
+                                )
+
+                        Err _ ->
+                            ( DoneAnimating Logic.blankBoard, Nothing )
+
+                ( basicMove, fenAfterMove ) :: ( _, currentFen ) :: _ ->
+                    case makeGameForAnimating availableMoves currentFen basicMove of
+                        Ok ( g, bMWP ) ->
+                            if model.madeMoveRecently then
+                                ( DoneAnimating <| makeGame availableMoves fenAfterMove
+                                , Nothing
+                                )
+
+                            else
+                                ( Animating { before = g, after = makeGame availableMoves fenAfterMove }
+                                , Just bMWP
+                                )
+
+                        Err e ->
+                            ( DoneAnimating Logic.blankBoard, Nothing )
+    in
+    ( { model | game = game, previousMove = basicMoveWithPieces, madeMoveRecently = False, movesHistorical = Historical pm }
+    , Cmd.none
+    )
 
 
 
@@ -145,15 +259,13 @@ makeGame availableMoves currentState recentMove =
 type Msg
     = ChangeTeam Team
     | FindReinforcements Position ()
-    | MakeMove Move
+    | StoreCopyOfBrowserBoard (Result Browser.Dom.Error Browser.Dom.Element)
+    | WindowResized
       -- Drag And Drop
     | StartDragging Int Int Position Logic.Piece
     | MoveDragging Int Int
     | StopDragging Int Int
     | MakeMoveIfDragIsOnBoard DragStuffInner (Result Browser.Dom.Error Browser.Dom.Element)
-    | SetSquareSize (Result Browser.Dom.Error Browser.Dom.Element)
-    | StoreCopyOfBrowserBoard (Result Browser.Dom.Error Browser.Dom.Element)
-    | WindowResized
 
 
 
@@ -164,7 +276,13 @@ update : Callbacks msg -> Msg -> Model -> ( Model, Cmd msg )
 update callbacks msg model =
     case msg of
         ChangeTeam color ->
-            ( { model | playerTeam = color }, Cmd.none )
+            moveMadeWithAnimation (Dict.toList (mapAnimating model.game |> .moves) |> List.map Tuple.second)
+                model.movesHistorical
+                callbacks.mapMsg
+                { model
+                    | playerTeam = color
+                    , madeMoveRecently = False
+                }
 
         FindReinforcements currentPosition _ ->
             case model.dragStuff of
@@ -172,23 +290,24 @@ update callbacks msg model =
                     ( { model | reinforcing = [], opponentReinforcing = [] }, Cmd.none )
 
                 PieceInHand { startingPosition } ->
+                    let
+                        gg =
+                            mapAnimating model.game
+                    in
                     ( { model
                         | reinforcing =
                             reinforcingSquares
                                 { starting = startingPosition, current = currentPosition }
-                                (Logic.canAttack currentPosition model.game)
-                                model.game.moves
+                                (Logic.canAttack currentPosition gg)
+                                gg.moves
                         , opponentReinforcing =
                             reinforcingSquares
                                 { starting = startingPosition, current = currentPosition }
-                                (Logic.canAttack currentPosition (Logic.nextTurn model.game |> Logic.removePiece currentPosition))
-                                model.game.moves
+                                (Logic.canAttack currentPosition (Logic.nextTurn gg |> Logic.removePiece currentPosition))
+                                gg.moves
                       }
                     , Cmd.none
                     )
-
-        MakeMove move ->
-            ( model, Task.perform callbacks.makeMove (Task.succeed move) )
 
         -- Drag and Drop
         StartDragging x y startingPosition piece ->
@@ -205,7 +324,7 @@ update callbacks msg model =
                                 , currentPosition = startingPosition
                                 }
                     in
-                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game, opponentReinforcing = [] }
+                    ( { model | dragStuff = initialDragStuff, game = DoneAnimating <| removePiece startingPosition (mapAnimating model.game), opponentReinforcing = [] }
                     , Task.perform (callbacks.mapMsg << FindReinforcements startingPosition) (Task.succeed ())
                     )
 
@@ -231,7 +350,7 @@ update callbacks msg model =
                                     { dragStuffInner | dragState = updatedDragState }
 
                                 Just browserBoard ->
-                                    case findCurrentPosition dragState browserBoard.element model.game.turn of
+                                    case findCurrentPosition dragState browserBoard.element (mapAnimating model.game |> .turn) of
                                         Nothing ->
                                             { dragStuffInner | dragState = updatedDragState }
 
@@ -271,40 +390,29 @@ update callbacks msg model =
                     ( model, Cmd.none )
 
                 Ok boardElement ->
-                    case positionOnBoard dragStuffInner boardElement.element model.game.turn of
+                    case positionOnBoard dragStuffInner boardElement.element (mapAnimating model.game |> .turn) of
                         Nothing ->
-                            ( { model | game = placePiece startingPosition piece model.game }
+                            ( { model | game = DoneAnimating <| placePiece startingPosition piece (mapAnimating model.game) }
                             , Cmd.none
                             )
 
                         Just finalPosition ->
-                            case friendlyMovesToPosition model.game.turn finalPosition startingPosition (Dict.toList model.game.moves |> List.map Tuple.second) of
+                            case friendlyMovesToPosition (mapAnimating model.game |> .turn) finalPosition startingPosition (Dict.toList (mapAnimating model.game |> .moves) |> List.map Tuple.second) of
                                 move :: [] ->
-                                    ( { model | game = placePiece finalPosition piece model.game }
+                                    ( { model | game = DoneAnimating <| placePiece finalPosition piece (mapAnimating model.game), madeMoveRecently = True }
                                     , Task.perform callbacks.makeMove (Task.succeed move)
                                     )
 
                                 promotionMove :: _ ->
-                                    -- TODO: busted.
-                                    ( { model | game = placePiece finalPosition piece model.game }
+                                    -- TODO: Hardcoded to promote to Advisor.
+                                    ( { model | game = DoneAnimating <| placePiece finalPosition piece (mapAnimating model.game), madeMoveRecently = True }
                                     , Task.perform callbacks.makeMove (Task.succeed promotionMove)
                                     )
 
                                 [] ->
-                                    ( { model | game = placePiece startingPosition piece model.game }
+                                    ( { model | game = DoneAnimating <| placePiece startingPosition piece (mapAnimating model.game) }
                                     , Cmd.none
                                     )
-
-        -- TODO: use this instead: https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onResize
-        -- Will make all piece sizes look the same.
-        -- Get the whole board element and then look it up whenever we need it and subscribe to changes.
-        SetSquareSize result ->
-            case result of
-                Err err ->
-                    ( model, Cmd.none )
-
-                Ok boardElement ->
-                    ( { model | squareSize = Just (round <| boardElement.element.width / 8) }, Cmd.none )
 
         StoreCopyOfBrowserBoard result ->
             case result of
@@ -317,21 +425,30 @@ update callbacks msg model =
         WindowResized ->
             ( model
             , Cmd.batch
-                [ Task.attempt (callbacks.mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
-                , Task.attempt (callbacks.mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
+                [ Task.attempt (callbacks.mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
                 ]
             )
 
 
+mapAnimating : AnimatedGame -> Logic.Game
+mapAnimating animatedGame =
+    case animatedGame of
+        Animating { after } ->
+            after
+
+        DoneAnimating g ->
+            g
+
+
 
 -- GAME LOGIC
-{-
-   Returns all squares that have pieces on them that are able to reinforce the move that is being considered.
 
-   Will first ensure that the move is legal before finding reinforcements.
+
+{-| Returns all squares that have pieces on them that are able to reinforce the move that is being considered.
+
+Will first ensure that the move is legal before finding reinforcements.
+
 -}
-
-
 reinforcingSquares : { starting : Position, current : Position } -> List Position -> Dict Logic.MoveKey Move -> List Position
 reinforcingSquares { starting, current } allMovesTo legalMoves =
     if Dict.member (Position.toAlgebraic starting ++ Position.toAlgebraic current) legalMoves || starting == current then
@@ -434,12 +551,22 @@ positionIsOnBoard x y element =
 
 
 view : Model -> Html Msg
-view { game, reinforcing, opponentReinforcing, playerTeam, dragStuff, squareSize } =
-    div [ class "container mx-auto" ]
-        [ lazy2 viewTurn game playerTeam
-        , lazy6 viewBoard game reinforcing opponentReinforcing playerTeam dragStuff squareSize
-        , lazy viewSettings playerTeam
-        ]
+view { game, movesHistorical, reinforcing, opponentReinforcing, playerTeam, dragStuff, browserBoard, previousMove } =
+    case game of
+        Animating { before, after } ->
+            div [ class "container mx-auto" ]
+                [ lazy2 viewTurn before playerTeam
+                , Maybe.map2 (lazy4 viewPreviousMove before playerTeam) previousMove browserBoard |> Maybe.withDefault (span [] [])
+                , lazy3 viewBoard (SquareStuff before movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
+                , lazy viewSettings playerTeam
+                ]
+
+        DoneAnimating g ->
+            div [ class "container mx-auto" ]
+                [ lazy2 viewTurn g playerTeam
+                , lazy3 viewBoard (SquareStuff g movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
+                , lazy viewSettings playerTeam
+                ]
 
 
 viewSettings : Team -> Html Msg
@@ -472,10 +599,19 @@ viewTurn game playerColor =
         ]
 
 
-viewBoard : Logic.Game -> List Position -> List Position -> Team -> DragStuff -> Maybe Int -> Html Msg
-viewBoard game reinforcing opponentReinforcing playerColor dragStuff squareSize =
+type alias SquareStuff =
+    { game : Logic.Game
+    , historical : Historical
+    , reinforcing : List Position
+    , opponentReinforcing : List Position
+    , playerColor : Team
+    }
+
+
+viewBoard : SquareStuff -> DragStuff -> Maybe Browser.Dom.Element -> Html Msg
+viewBoard ({ game, playerColor, historical } as cellStuff) dragStuff browserBoard =
     div []
-        [ Prelude.maybe (span [] []) (lazy4 viewGhostSquare game playerColor dragStuff) squareSize
+        [ Prelude.maybe (span [] []) (lazy4 viewGhostSquare game playerColor dragStuff) browserBoard
         , div
             [ id "main-board"
             , classList
@@ -483,17 +619,17 @@ viewBoard game reinforcing opponentReinforcing playerColor dragStuff squareSize 
                 , ( "rotated", playerColor == Logic.White )
                 ]
             ]
-            (List.concatMap (viewRow game reinforcing opponentReinforcing playerColor) (List.range 1 8))
+            (List.concatMap (viewRow cellStuff browserBoard) (List.range 1 8))
         ]
 
 
-viewRow : Logic.Game -> List Position -> List Position -> Team -> Int -> List (Html Msg)
-viewRow game reinforcing opponentReinforcing playerColor row =
-    List.map (lazy6 viewCell game reinforcing opponentReinforcing playerColor row) (List.reverse (List.range 1 8))
+viewRow : SquareStuff -> Maybe Browser.Dom.Element -> Int -> List (Html Msg)
+viewRow cellStuff browserBoard row =
+    List.map (lazy4 viewCell cellStuff browserBoard row) (List.reverse (List.range 1 8))
 
 
-viewCell : Logic.Game -> List Position -> List Position -> Team -> Int -> Int -> Html Msg
-viewCell game reinforcing opponentReinforcing playerColor row column =
+viewCell : SquareStuff -> Maybe Browser.Dom.Element -> Int -> Int -> Html Msg
+viewCell ({ playerColor } as cellStuff) browserBoard row column =
     div
         [ classList
             [ ( "column-" ++ String.fromInt column, True )
@@ -502,11 +638,15 @@ viewCell game reinforcing opponentReinforcing playerColor row column =
             , ( "rotated", playerColor == Logic.White )
             ]
         ]
-        [ lazy5 viewSquare game reinforcing opponentReinforcing playerColor (Position column row) ]
+        [ lazy3 viewSquare cellStuff browserBoard (Position column row) ]
 
 
-viewGhostSquare : Logic.Game -> Team -> DragStuff -> Int -> Html Msg
-viewGhostSquare game playerColor dragStuff squareSize =
+viewGhostSquare : Logic.Game -> Team -> DragStuff -> Browser.Dom.Element -> Html Msg
+viewGhostSquare game playerColor dragStuff browserBoard =
+    let
+        squareSize =
+            round <| browserBoard.element.width / 8
+    in
     case dragStuff of
         NoPieceInHand ->
             span [] []
@@ -534,6 +674,110 @@ viewGhostSquare game playerColor dragStuff squareSize =
                 [ findSvg piece [] ]
 
 
+viewPreviousMove : Logic.Game -> Team -> BasicMoveWithPieces -> Browser.Dom.Element -> Html Msg
+viewPreviousMove game playerColor (BasicMoveWithPieces { from, to, pieceMoved, pieceCaptured }) browserBoard =
+    let
+        squareSize =
+            (browserBoard.element.width / 8)
+                |> Debug.log "squareSize"
+    in
+    div []
+        [ Animated.div (runFull { starting = Position.toRaw from, diff = Position.toRaw to } playerColor squareSize)
+            [ classList
+                [ ( "grid-cols-none", True )
+                , ( "absolute", True )
+                , ( "z-50", True )
+
+                --, ( "border-2", True )
+                ]
+            , styleList
+                [ "width: " ++ String.fromInt (round squareSize) ++ "px"
+                , "height: " ++ String.fromInt (round squareSize) ++ "px"
+                ]
+            ]
+            [ findSvg pieceMoved [] ]
+        , case pieceCaptured of
+            Nothing ->
+                div [] []
+
+            Just pC ->
+                Animated.div (runHide { starting = Position.toRaw to } playerColor squareSize)
+                    [ classList
+                        [ ( "grid-cols-none", True )
+                        , ( "absolute", True )
+                        , ( "z-50", True )
+                        ]
+                    , styleList
+                        [ "width: " ++ String.fromInt (round squareSize) ++ "px"
+                        , "height: " ++ String.fromInt (round squareSize) ++ "px"
+                        ]
+                    ]
+                    [ findSvg pC [] ]
+        ]
+
+
+runHide : { starting : ( Int, Int ) } -> Team -> Float -> Animation
+runHide { starting } playerColor squareSize =
+    let
+        borderSize =
+            -2
+    in
+    Animation.steps { startAt = [ squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ], options = [ Animation.delay 500 ] }
+        [ Animation.step 400 [ P.opacity 0, squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ]
+        ]
+
+
+runFull : { starting : ( Int, Int ), diff : ( Int, Int ) } -> Team -> Float -> Animation
+runFull { starting, diff } playerColor squareSize =
+    let
+        borderSize =
+            case playerColor of
+                Logic.Black ->
+                    0
+
+                Logic.White ->
+                    0
+    in
+    Animation.steps
+        { startAt =
+            [ squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y)
+            ]
+        , options = [ Animation.easeInOut ]
+        }
+        [ Animation.wait 500
+        , Animation.step 400 [ squareLocation diff squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ]
+        , Animation.wait 300
+        , Animation.step 500
+            [ squareLocation diff squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y)
+            , P.backgroundColor "rgba(156, 163, 175, 0.7)"
+
+            --, P.borderColor "rgba(0, 0, 0, 1)"
+            ]
+        ]
+
+
+squareLocation : ( Int, Int ) -> Float -> Float -> Team -> ( Float, Float )
+squareLocation ( squareDiffX, squareDiffY ) squareSize borderSize playerColor =
+    let
+        xPerspectiveCorrected =
+            case playerColor of
+                Logic.Black ->
+                    toFloat (8 - squareDiffX)
+
+                Logic.White ->
+                    toFloat (squareDiffX - 1)
+
+        yPerspectiveCorrected =
+            case playerColor of
+                Logic.Black ->
+                    toFloat (squareDiffY - 1)
+
+                Logic.White ->
+                    toFloat (8 - squareDiffY)
+    in
+    ( xPerspectiveCorrected * squareSize + borderSize, yPerspectiveCorrected * squareSize + borderSize )
+
+
 styleList : List String -> Attribute Msg
 styleList styles =
     String.join "; " styles
@@ -549,41 +793,54 @@ getDragCoordinates { x, y, dragState } =
     ( x + endX - startX, y + endY - startY )
 
 
-viewSquare : Logic.Game -> List Position -> List Position -> Team -> Position -> Html Msg
-viewSquare game reinforcing opponentReinforcing playerColor position =
-    if game.turn == playerColor then
-        case Dict.get (Position.toRaw position) game.occupiedSquares of
-            Just piece ->
-                div
-                    [ classList
-                        [ ( "w-full h-full m-0", True )
-                        , ( "bg-green-500", reinforces position reinforcing )
-                        , ( "bg-yellow-500", reinforces position opponentReinforcing )
-                        , ( "bg-gray-400 bg-opacity-50 border-4 border-black", isRecentMove position game.recentMove )
-                        , ( "transition", True )
-                        , ( Position.toAlgebraic position, True )
-                        ]
-                    , style "cursor: grab"
+viewSquare : SquareStuff -> Maybe Browser.Dom.Element -> Position -> Html Msg
+viewSquare { game, historical, reinforcing, opponentReinforcing, playerColor } browserBoard position =
+    case ( game.turn == playerColor, Dict.get (Position.toRaw position) game.occupiedSquares ) of
+        ( True, Just piece ) ->
+            let
+                additionalSquareClasses =
+                    [ ( "bg-green-500", reinforces position reinforcing )
+                    , ( "bg-yellow-500", reinforces position opponentReinforcing )
+                    , ( Position.toAlgebraic position, True )
+                    ]
+
+                additionalSquareAttrs =
+                    [ style "cursor: grab"
                     , on "mousedown" (D.map4 StartDragging pageX pageY (D.succeed position) (D.succeed piece))
                     ]
-                    [ findSvg piece [] ]
+            in
+            basicSquare position historical additionalSquareClasses additionalSquareAttrs [ findSvg piece [] ]
 
-            Nothing ->
-                div
-                    [ classList
-                        [ ( "w-full h-full m-0", True )
-                        , ( "bg-gray-400 bg-opacity-50 border-4 border-black", isRecentMove position game.recentMove )
-                        ]
-                    ]
-                    []
+        ( False, Just piece ) ->
+            basicSquare position historical [] [] [ findSvg piece [] ]
 
-    else
-        viewSquareDetails game.occupiedSquares position [] []
+        ( _, Nothing ) ->
+            basicSquare position historical [] [] []
 
 
-isRecentMove : Position -> Maybe Logic.BasicMove -> Bool
-isRecentMove position recentMove =
-    Prelude.maybe False (\{ from, to } -> from == position || to == position) recentMove
+basicSquare position historical additionalSquareClasses additionalSquareAttrs additionalSquareChildren =
+    div
+        ([ classList
+            ([ ( "w-full h-full m-0", True )
+             , ( "bg-gray-400 bg-opacity-70", isRecentMove position historical )
+             , ( "transition", True )
+             ]
+                ++ additionalSquareClasses
+            )
+         ]
+            ++ additionalSquareAttrs
+        )
+        additionalSquareChildren
+
+
+isRecentMove : Position -> Historical -> Bool
+isRecentMove position (Historical directional) =
+    case directional of
+        [] ->
+            False
+
+        ( BasicMove { from, to }, _ ) :: _ ->
+            from == position || to == position
 
 
 reinforces : Position -> List Position -> Bool
@@ -591,33 +848,13 @@ reinforces position reinforcing =
     List.any ((==) position) reinforcing
 
 
-viewSquareDetails : Dict ( Int, Int ) Logic.Piece -> Position -> List ( String, Bool ) -> List (Attribute Msg) -> Html Msg
-viewSquareDetails pieces position additionalClasses additionalEvents =
-    div
-        ([ classList
-            ([ ( "w-full h-full m-0", True )
-             ]
-                ++ additionalClasses
-            )
-         ]
-            ++ additionalEvents
-        )
-        (case Dict.get (Position.toRaw position) pieces of
-            Just piece ->
-                [ findSvg piece [] ]
-
-            Nothing ->
-                []
-        )
-
-
 shading : Int -> Int -> String
 shading column row =
     if modBy 2 (column + row) == 0 then
-        "bg-gray-200"
+        "bg-gray-200 bg-opacity-50"
 
     else
-        "bg-indigo-400"
+        "bg-indigo-400 bg-opacity-50"
 
 
 
@@ -628,16 +865,6 @@ friendlyMovesToPosition : Team -> Position -> Position -> List Move -> List Move
 friendlyMovesToPosition turn squareTo squareFrom moves =
     movesToPosition squareTo squareFrom moves
         |> List.filter (\move -> move.color == turnToColor turn)
-
-
-friendlyMoves : Team -> Move -> Bool
-friendlyMoves turn move =
-    move.color == turnToColor turn
-
-
-movesToSquare : Position -> Move -> Bool
-movesToSquare squareTo move =
-    move.squareTo == Position.toAlgebraic squareTo
 
 
 
