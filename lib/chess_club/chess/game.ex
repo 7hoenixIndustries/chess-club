@@ -4,7 +4,7 @@ defmodule ChessClub.Chess.Game do
 
   alias ChessClub.Chess.Move
   @expected_fields ~w(
-                      moves current_state
+                      moves current_state recent_fen
                     )
 
   def start_link(opts) do
@@ -39,9 +39,11 @@ defmodule ChessClub.Chess.Game do
     {:ok, request_body} = Poison.encode(%{board: fen, moves_made: moves_made})
     body = :python.call(server, :app, :route_moves_erlport, [request_body])
 
-    %{moves: moves, current_state: current_state} = extract_response(body)
+    %{moves: moves, current_state: current_state, recent_fen: recent_fen} = extract_response(body)
 
-    {:reply, {Enum.map(moves, &to_move/1), current_state}, %{chess_server: server}}
+    {:reply,
+     %{moves: Enum.map(moves, &to_move/1), current_state: current_state, recent_fen: recent_fen},
+     %{chess_server: server}}
   end
 
   def handle_call({:legal_move, %{fen: fen, moves_made: moves_made, move: move}}, _from, %{

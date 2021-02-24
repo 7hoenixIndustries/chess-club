@@ -8,7 +8,7 @@ defmodule ChessClubWeb.Schema do
   object :scenario do
     field :id, non_null(:id)
     field :current_state, non_null(:string)
-    field :recent_move, :string
+    field :recent_move, :recent_move
     field :available_moves, non_null(list_of(non_null(:move)))
   end
 
@@ -24,6 +24,13 @@ defmodule ChessClubWeb.Schema do
     field :move_command, non_null(:string)
     @desc "The fen state if this move were to be made."
     field :fen_after_move, non_null(:string)
+  end
+
+  object :recent_move do
+    @desc "The fen state before this move was made."
+    field :fen_before_move, non_null(:string)
+    @desc "The move command."
+    field :recent_move_command, non_null(:string)
   end
 
   mutation do

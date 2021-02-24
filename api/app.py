@@ -26,9 +26,10 @@ def moves(board, moves_made):
         chess_board.push(chess.Move.from_uci(move))
     assert chess_board.is_valid()
     return {
-        "moves": possible_moves(chess_board.copy()),
-        "turn": turn(chess_board),
         "current_state": chess_board.fen(),
+        "moves": possible_moves(chess_board.copy()),
+        "recent_fen": recent_fen(chess_board.copy()),
+        "turn": turn(chess_board),
     }
 
 def possible_moves(chess_board):
@@ -37,6 +38,13 @@ def possible_moves(chess_board):
     second_moves = possible_moves_for(chess_board.copy())
     chess_board.pop()
     return list(first_moves) + list(second_moves)
+
+def recent_fen(chess_board):
+    if len(chess_board.move_stack) > 0:
+        chess_board.pop()
+        return str(chess_board.fen())
+    else:
+        return ""
 
 def possible_moves_for(chess_board):
     return map(

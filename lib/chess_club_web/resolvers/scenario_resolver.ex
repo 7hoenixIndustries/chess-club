@@ -58,7 +58,7 @@ defmodule ChessClubWeb.ScenarioResolver do
   defp enrich_scenario(scenario) do
     move_commands = Enum.map(scenario.moves, & &1.move_command)
 
-    {available_moves, current_state} =
+    %{moves: available_moves, current_state: current_state, recent_fen: recent_fen} =
       Game.available_moves(Game, scenario.starting_state, move_commands)
 
     recent_move =
@@ -67,11 +67,35 @@ defmodule ChessClubWeb.ScenarioResolver do
       |> Enum.to_list()
       |> List.first()
 
-    %{
-      current_state: current_state,
-      available_moves: available_moves,
-      recent_move: recent_move,
-      id: scenario.id
-    }
+    case {recent_fen, recent_move} do
+      {nil, nil} ->
+        %{
+          current_state: current_state,
+          available_moves: available_moves,
+          id: scenario.id
+        }
+
+      {nil, _} ->
+        %{
+          current_state: current_state,
+          available_moves: available_moves,
+          id: scenario.id
+        }
+
+      {_, nil} ->
+        %{
+          current_state: current_state,
+          available_moves: available_moves,
+          id: scenario.id
+        }
+
+      {_, _} ->
+        %{
+          current_state: current_state,
+          available_moves: available_moves,
+          recent_move: %{recent_move_command: recent_move, fen_before_move: recent_fen},
+          id: scenario.id
+        }
+    end
   end
 end
