@@ -115,9 +115,9 @@ defmodule ChessClubWeb.ScenarioTest do
             squareTo
             color
           }
-          recentMove {
-            recent_move_command
-            fen_before_move
+          movesPlayed {
+            previousMove
+            fenAfterMove
           }
           id
         }
@@ -165,7 +165,7 @@ defmodule ChessClubWeb.ScenarioTest do
                    "id" => "#{scenario.id}",
                    "availableMoves" => expected_moves,
                    "currentState" => starting_state,
-                   "recentMove" => nil
+                   "movesPlayed" => []
                  }
                }
              }
@@ -193,9 +193,9 @@ defmodule ChessClubWeb.ScenarioTest do
             moveCommand
             color
           }
-          recentMove {
-            recent_move_command
-            fen_before_move
+          movesPlayed {
+            previousMove
+            fenAfterMove
           }
           id
         }
@@ -258,10 +258,12 @@ defmodule ChessClubWeb.ScenarioTest do
         }
       ]
 
-      expected_recent_move = %{
-        "recent_move_command" => "h8g8",
-        "fen_before_move" => "7k/8/7K/8/7P/8/8/8 b - - 0 77"
-      }
+      expected_moves_played = [
+        %{
+          "previousMove" => "h8g8",
+          "fenAfterMove" => "6k1/8/7K/8/7P/8/8/8 w - - 1 78"
+        }
+      ]
 
       assert json_response(response, 200) == %{
                "data" => %{
@@ -269,7 +271,7 @@ defmodule ChessClubWeb.ScenarioTest do
                    "id" => "#{move.scenario_id}",
                    "availableMoves" => expected_moves,
                    "currentState" => expected_current_state,
-                   "recentMove" => expected_recent_move
+                   "movesPlayed" => expected_moves_played
                  }
                }
              }

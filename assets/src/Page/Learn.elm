@@ -18,7 +18,7 @@ import Html.Events exposing (onClick)
 import Html.Lazy exposing (..)
 import Js
 import Json.Decode
-import Page.Learn.Scenario as Scenario exposing (Move, scenarioSelection, subscribeToMoves)
+import Page.Learn.Scenario as Scenario exposing (Fen(..), Move, scenarioSelection, subscribeToMoves)
 import Prelude
 import Session
 import Skeleton
@@ -60,9 +60,8 @@ init backend session =
         Nothing ->
             ( Model Nothing session Loading NotConnected Nothing
             , Cmd.batch
-                [ Scenario.getScenarios backend GotScenarios
-
-                --[ Scenario.getScenario backend (Api.Scalar.Id "1") GotScenario
+                --[ Scenario.getScenarios backend GotScenarios
+                [ Scenario.getScenario backend (Api.Scalar.Id "2") GotScenario
                 ]
             )
 
@@ -126,7 +125,7 @@ update backend msg model =
                 Ok scenario ->
                     let
                         ( chessModel, chessMsg ) =
-                            Chess.init scenario.availableMoves scenario.currentState scenario.recentMove ChessMsg
+                            Chess.init scenario.availableMoves scenario.currentState scenario.previousMoves ChessMsg
                     in
                     -- TODO: chessModel is directly dependent on scenario. . . are we able to combine these somehow?
                     ( { model
@@ -178,12 +177,26 @@ update backend msg model =
                 Just scenario ->
                     case Json.Decode.decodeValue (subscribeToMoves scenario.id |> Graphql.Document.decoder) newData of
                         Ok s ->
-                            ( { model
-                                | scenario = Just s
-                                , chessModel = Maybe.map (\chessModel -> { chessModel | game = Chess.makeGame s.availableMoves s.currentState s.recentMove }) model.chessModel
-                              }
-                            , Cmd.none
-                            )
+                            case model.chessModel of
+                                Nothing ->
+                                    ( { model
+                                        | scenario = Just s
+                                        , chessModel = Nothing
+                                      }
+                                    , Cmd.none
+                                    )
+
+                                Just chessModel ->
+                                    let
+                                        ( updatedModel, chessMsgs ) =
+                                            Chess.moveMade s.availableMoves s.previousMoves ChessMsg chessModel
+                                    in
+                                    ( { model
+                                        | scenario = Just s
+                                        , chessModel = Just updatedModel
+                                      }
+                                    , chessMsgs
+                                    )
 
                         Err error ->
                             -- TODO: Display error so they know to refresh.

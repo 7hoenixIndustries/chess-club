@@ -1,6 +1,9 @@
 module Page.Learn.Scenario exposing
-    ( Move
-    , RecentMove(..)
+    ( BasicMove(..)
+    , Fen(..)
+    , Move
+    , MoveCommand(..)
+    , PreviousMovesSafe(..)
     , Scenario
     , Scenario2(..)
     , ScenarioSeed
@@ -16,15 +19,19 @@ module Page.Learn.Scenario exposing
 import Api.Mutation as Mutation
 import Api.Object
 import Api.Object.Move
-import Api.Object.RecentMove
-import Api.Object.Scenario exposing (availableMoves, currentState, id, recentMove)
+import Api.Object.MovePlayed
+import Api.Object.Scenario exposing (availableMoves, currentState, id, movesPlayed)
 import Api.Query exposing (scenario, scenarios)
 import Api.Scalar exposing (Id(..))
 import Api.Subscription as Subscription
 import Backend exposing (Backend)
+import Chess.Position as Position exposing (Position)
 import Graphql.Http exposing (Request)
 import Graphql.Operation exposing (RootMutation, RootQuery, RootSubscription)
 import Graphql.SelectionSet as SelectionSet exposing (SelectionSet, list, with)
+import Json.Decode as D
+import Json.Encode as E
+import Result.Extra
 
 
 
@@ -38,14 +45,40 @@ type Scenario2
 
 type alias Scenario =
     { availableMoves : List Move
-    , currentState : String
-    , recentMove : Maybe RecentMove
+    , currentState : Fen
+    , previousMoves : PreviousMovesSafe
     , id : Id
     }
 
 
-type RecentMove
-    = RecentMove { recentFen : String, moveCommand : String }
+
+--type alias PreviousMoves =
+--    DirectionalList PreviousMove
+--type PreviousMove
+--    = FirstMove FenAfterMove
+--    | OngoingMove FenAfterMove MoveCommand
+
+
+{-| Starting fen (can't have a valid game without one!). But before any moves have been played. . . we don't have a previous.
+
+And then any moves that have been played.
+These are kept as a list of tuples with the command and corresponding fen afterwards.
+
+-}
+type PreviousMovesSafe
+    = PreviousMovesSafe Fen (List ( BasicMove, Fen ))
+
+
+type Fen
+    = Fen String
+
+
+type MoveCommand
+    = MoveCommand String
+
+
+type BasicMove
+    = BasicMove { from : Position, to : Position }
 
 
 scenarioQuery : Id -> SelectionSet Scenario RootQuery
@@ -57,16 +90,77 @@ scenarioSelection : SelectionSet Scenario Api.Object.Scenario
 scenarioSelection =
     SelectionSet.map4 Scenario
         (availableMoves moveSelection)
-        currentState
-        (recentMove recentMoveSelection)
+        (SelectionSet.map Fen currentState)
+        movesPlayedSelection
         id
 
 
-recentMoveSelection : SelectionSet RecentMove Api.Object.RecentMove
-recentMoveSelection =
-    SelectionSet.succeed (\a b -> RecentMove { recentFen = a, moveCommand = b })
-        |> with Api.Object.RecentMove.fenBeforeMove
-        |> with Api.Object.RecentMove.recentMoveCommand
+mPS mp =
+    let
+        moveNonNull : ( Maybe MoveCommand, Fen ) -> Result String ( BasicMove, Fen )
+        moveNonNull ( moveCommand, fen ) =
+            case moveCommand of
+                Nothing ->
+                    Err "Every move after the first one should have a move to it!"
+
+                Just (MoveCommand mc) ->
+                    case String.toList mc of
+                        [ a, b, c, d ] ->
+                            (Result.map2
+                                (\from to -> BasicMove { from = from, to = to })
+                                (D.decodeValue Position.decoder (E.string (String.fromList [ a, b ])))
+                                (D.decodeValue Position.decoder (E.string (String.fromList [ c, d ])))
+                                |> Result.mapError (\_ -> "Not a valid move")
+                            )
+                                |> Result.map (\basicMove -> ( basicMove, fen ))
+
+                        _ ->
+                            Err "Unhandled move variant!"
+    in
+    case mp of
+        ( Nothing, fen ) :: rem ->
+            let
+                bar =
+                    Result.Extra.combine (List.map moveNonNull rem)
+            in
+            bar
+                |> Result.map (PreviousMovesSafe fen)
+
+        ( Just opening, fen ) :: rem ->
+            -- I can see a world where we would want to show this (as its helpful to figure out the flow by imagining
+            -- a previous move. . . but forcing a "made up" previous from a fen snapshot seems to be kind of weird.
+            Err "Previous move is present at beginning."
+
+        [] ->
+            Err "Blank opening state"
+
+
+movesPlayedSelection : SelectionSet PreviousMovesSafe Api.Object.Scenario
+movesPlayedSelection =
+    SelectionSet.mapOrFail mPS
+        (movesPlayed movePlayedSelection)
+
+
+
+--movesPlayedSelection : SelectionSet PreviousMovesSafe Api.Object.MovePlayed
+--movesPlayedSelection =
+--    SelectionSet.map2 PreviousMovesSafe
+--        |> with openingMoveSelectionSet
+
+
+movePlayedSelection : SelectionSet ( Maybe MoveCommand, Fen ) Api.Object.MovePlayed
+movePlayedSelection =
+    SelectionSet.succeed (\rawPrevious rawFen -> Tuple.pair (Maybe.map MoveCommand rawPrevious) (Fen rawFen))
+        |> with Api.Object.MovePlayed.previousMove
+        |> with Api.Object.MovePlayed.fenAfterMove
+
+
+
+--recentMoveSelection : SelectionSet RecentMove Api.Object.RecentMove
+--recentMoveSelection =
+--    SelectionSet.succeed (\a b -> RecentMove { recentFen = a, moveCommand = b })
+--        |> with Api.Object.RecentMove.fenBeforeMove
+--        |> with Api.Object.RecentMove.recentMoveCommand
 
 
 getScenario : Backend -> Id -> (Result (Graphql.Http.Error Scenario) Scenario -> msg) -> Cmd msg

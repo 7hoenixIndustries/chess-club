@@ -10,6 +10,10 @@ def legal_move(event):
     as_json = json.loads(event)
     return json.dumps(is_legal(as_json["board"], as_json["moves_made"], as_json["move"]))
 
+def moves_played(event):
+    as_json = json.loads(event)
+    return json.dumps(moves_already_played(as_json["board"], as_json["moves_made"]))
+
 # MOVES
 
 def is_legal(board, moves_made, move):
@@ -28,9 +32,17 @@ def moves(board, moves_made):
     return {
         "current_state": chess_board.fen(),
         "moves": possible_moves(chess_board.copy()),
-        "recent_fen": recent_fen(chess_board.copy()),
         "turn": turn(chess_board),
     }
+
+def moves_already_played(board, moves_made):
+    chess_board = chess.Board(board)
+    mp = []
+    for move in moves_made:
+        move_as_uci = chess.Move.from_uci(move)
+        chess_board.push(move_as_uci)
+        mp.append({"fen_after_move": chess_board.fen(), "previous_move": move_as_uci.uci()})
+    return {"moves_played": mp}
 
 def possible_moves(chess_board):
     first_moves = possible_moves_for(chess_board.copy())
@@ -38,13 +50,6 @@ def possible_moves(chess_board):
     second_moves = possible_moves_for(chess_board.copy())
     chess_board.pop()
     return list(first_moves) + list(second_moves)
-
-def recent_fen(chess_board):
-    if len(chess_board.move_stack) > 0:
-        chess_board.pop()
-        return str(chess_board.fen())
-    else:
-        return ""
 
 def possible_moves_for(chess_board):
     return map(

@@ -1,6 +1,5 @@
 module Chess.Logic exposing
-    ( BasicMove
-    , CastlingRight(..)
+    ( CastlingRight(..)
     , Game
     , MoveKey
     , Piece(..)
@@ -23,7 +22,7 @@ import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
 import Json.Decode as D
 import Json.Encode as E
-import Page.Learn.Scenario exposing (Move)
+import Page.Learn.Scenario exposing (Move, PreviousMovesSafe)
 import Set exposing (Set)
 
 
@@ -60,13 +59,8 @@ type alias Game =
     , turn : Team
     , enpassant : Maybe Position
     , castlingRights : List CastlingRight
-    , recentMove : Maybe BasicMove
     , moves : Dict MoveKey Move
     }
-
-
-type alias BasicMove =
-    { from : Position, to : Position }
 
 
 type CastlingRight
@@ -250,12 +244,12 @@ asht (Occupied position piece) b =
 
 init : List Square -> Team -> Maybe Position -> List CastlingRight -> Game
 init squares turn enpassant castlingRights =
-    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Nothing Dict.empty
+    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Dict.empty
 
 
 blankBoard : Game
 blankBoard =
-    Game Dict.empty Black Nothing [] Nothing Dict.empty
+    Game Dict.empty Black Nothing [] Dict.empty
 
 
 
@@ -850,13 +844,13 @@ occupiedByFriendly piece team =
 -- SERIALIZATION
 
 
-fromFen : List Move -> String -> Maybe BasicMove -> Result String Game
-fromFen moves fen recentMove =
+fromFen : List Move -> String -> Result String Game
+fromFen moves fen =
     case String.split " " fen of
         [ rawBoard, rawTurn, rawCastlingRights, rawEnpassant, e, f ] ->
             Result.map4
                 (\board turn enpassant castlingRights ->
-                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights recentMove (movesToDict moves)
+                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights (movesToDict moves)
                 )
                 (D.decodeValue boardDecoder (E.string rawBoard))
                 (D.decodeValue turnDecoder (E.string rawTurn))

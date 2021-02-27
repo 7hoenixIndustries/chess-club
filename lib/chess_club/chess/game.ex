@@ -4,7 +4,7 @@ defmodule ChessClub.Chess.Game do
 
   alias ChessClub.Chess.Move
   @expected_fields ~w(
-                      moves current_state recent_fen
+                      moves current_state
                     )
 
   def start_link(opts) do
@@ -24,6 +24,10 @@ defmodule ChessClub.Chess.Game do
     GenServer.call(server, {:legal_move, %{fen: fen, moves_made: moves_made, move: move}})
   end
 
+  def moves_played(server, fen, moves_made) do
+    GenServer.call(server, {:moves_played, %{fen: fen, moves_made: moves_made}})
+  end
+
   ## SERVER
 
   @impl GenServer
@@ -39,11 +43,22 @@ defmodule ChessClub.Chess.Game do
     {:ok, request_body} = Poison.encode(%{board: fen, moves_made: moves_made})
     body = :python.call(server, :app, :route_moves_erlport, [request_body])
 
-    %{moves: moves, current_state: current_state, recent_fen: recent_fen} = extract_response(body)
+    %{moves: moves, current_state: current_state} = extract_response(body)
 
-    {:reply,
-     %{moves: Enum.map(moves, &to_move/1), current_state: current_state, recent_fen: recent_fen},
+    {:reply, %{moves: Enum.map(moves, &to_move/1), current_state: current_state},
      %{chess_server: server}}
+  end
+
+  def handle_call({:moves_played, %{fen: fen, moves_made: moves_made}}, _from, %{
+        chess_server: server
+      }) do
+    {:ok, request_body} = Poison.encode(%{board: fen, moves_made: moves_made})
+
+    %{"moves_played" => moves_played} =
+      Poison.decode!(:python.call(server, :app, :moves_played, [request_body]))
+
+    moves_played = Enum.map(moves_played, &to_previous_move/1)
+    {:reply, %{moves_played: moves_played}, %{chess_server: server}}
   end
 
   def handle_call({:legal_move, %{fen: fen, moves_made: moves_made, move: move}}, _from, %{
@@ -83,6 +98,16 @@ defmodule ChessClub.Chess.Game do
       color: c,
       move_command: move_command,
       fen_after_move: fen_after_move
+    }
+  end
+
+  defp to_previous_move(%{
+         "fen_after_move" => fen_after_move,
+         "previous_move" => previous_move
+       }) do
+    %{
+      fen_after_move: fen_after_move,
+      previous_move: previous_move
     }
   end
 end
