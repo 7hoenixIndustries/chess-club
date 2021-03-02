@@ -66,7 +66,7 @@ These are kept as a list of tuples with the command and corresponding fen afterw
 
 -}
 type PreviousMovesSafe
-    = PreviousMovesSafe Fen (List ( BasicMove, Fen ))
+    = PreviousMovesSafe (List ( BasicMove, Fen ))
 
 
 type Fen
@@ -97,42 +97,23 @@ scenarioSelection =
 
 mPS mp =
     let
-        moveNonNull : ( Maybe MoveCommand, Fen ) -> Result String ( BasicMove, Fen )
-        moveNonNull ( moveCommand, fen ) =
-            case moveCommand of
-                Nothing ->
-                    Err "Every move after the first one should have a move to it!"
+        moveNonNull : ( MoveCommand, Fen ) -> Result String ( BasicMove, Fen )
+        moveNonNull ( MoveCommand mc, fen ) =
+            case String.toList mc of
+                [ a, b, c, d ] ->
+                    (Result.map2
+                        (\from to -> BasicMove { from = from, to = to })
+                        (D.decodeValue Position.decoder (E.string (String.fromList [ a, b ])))
+                        (D.decodeValue Position.decoder (E.string (String.fromList [ c, d ])))
+                        |> Result.mapError (\_ -> "Not a valid move")
+                    )
+                        |> Result.map (\basicMove -> ( basicMove, fen ))
 
-                Just (MoveCommand mc) ->
-                    case String.toList mc of
-                        [ a, b, c, d ] ->
-                            (Result.map2
-                                (\from to -> BasicMove { from = from, to = to })
-                                (D.decodeValue Position.decoder (E.string (String.fromList [ a, b ])))
-                                (D.decodeValue Position.decoder (E.string (String.fromList [ c, d ])))
-                                |> Result.mapError (\_ -> "Not a valid move")
-                            )
-                                |> Result.map (\basicMove -> ( basicMove, fen ))
-
-                        _ ->
-                            Err "Unhandled move variant!"
+                _ ->
+                    Err "Unhandled move variant!"
     in
-    case mp of
-        ( Nothing, fen ) :: rem ->
-            let
-                bar =
-                    Result.Extra.combine (List.map moveNonNull rem)
-            in
-            bar
-                |> Result.map (PreviousMovesSafe fen)
-
-        ( Just opening, fen ) :: rem ->
-            -- I can see a world where we would want to show this (as its helpful to figure out the flow by imagining
-            -- a previous move. . . but forcing a "made up" previous from a fen snapshot seems to be kind of weird.
-            Err "Previous move is present at beginning."
-
-        [] ->
-            Err "Blank opening state"
+    Result.Extra.combine (List.map moveNonNull mp)
+        |> Result.andThen (\foo -> Ok (PreviousMovesSafe foo))
 
 
 movesPlayedSelection : SelectionSet PreviousMovesSafe Api.Object.Scenario
@@ -141,16 +122,9 @@ movesPlayedSelection =
         (movesPlayed movePlayedSelection)
 
 
-
---movesPlayedSelection : SelectionSet PreviousMovesSafe Api.Object.MovePlayed
---movesPlayedSelection =
---    SelectionSet.map2 PreviousMovesSafe
---        |> with openingMoveSelectionSet
-
-
-movePlayedSelection : SelectionSet ( Maybe MoveCommand, Fen ) Api.Object.MovePlayed
+movePlayedSelection : SelectionSet ( MoveCommand, Fen ) Api.Object.MovePlayed
 movePlayedSelection =
-    SelectionSet.succeed (\rawPrevious rawFen -> Tuple.pair (Maybe.map MoveCommand rawPrevious) (Fen rawFen))
+    SelectionSet.succeed (\rawPrevious rawFen -> Tuple.pair (MoveCommand rawPrevious) (Fen rawFen))
         |> with Api.Object.MovePlayed.previousMove
         |> with Api.Object.MovePlayed.fenAfterMove
 

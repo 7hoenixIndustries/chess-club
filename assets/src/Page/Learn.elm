@@ -60,8 +60,9 @@ init backend session =
         Nothing ->
             ( Model Nothing session Loading NotConnected Nothing
             , Cmd.batch
-                --[ Scenario.getScenarios backend GotScenarios
-                [ Scenario.getScenario backend (Api.Scalar.Id "2") GotScenario
+                [ Scenario.getScenarios backend GotScenarios
+
+                --[ Scenario.getScenario backend (Api.Scalar.Id "3") GotScenario
                 ]
             )
 

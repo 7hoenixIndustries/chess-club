@@ -86,7 +86,7 @@ type alias Model =
 
 
 type Historical
-    = Historical Fen (DirectionalList ( BasicMove, Fen ))
+    = Historical (List ( BasicMove, Fen ))
 
 
 type DragStuff
@@ -109,20 +109,25 @@ type DragState
 
 
 init : List Move -> Fen -> PreviousMovesSafe -> (Msg -> msg) -> ( Model, Cmd msg )
-init availableMoves currentState ((PreviousMovesSafe fen pm) as previousMoves) mapMsg =
+init availableMoves currentState (PreviousMovesSafe pm) mapMsg =
     let
-        dl =
-            DirectionalList.fromList pm |> DirectionalList.toEnd
+        previousMoves =
+            Debug.log "previous" (List.reverse pm)
 
         ( game, additionalSetupCommands ) =
-            case DirectionalList.selected dl of
-                Nothing ->
+            case previousMoves of
+                [] ->
                     -- Opening Move
-                    ( makeGame availableMoves fen previousMoves, Cmd.none )
+                    ( makeGame availableMoves currentState, Cmd.none )
 
-                Just ( basicMove, fenAfterMove ) ->
-                    ( makeGame availableMoves fenAfterMove previousMoves
-                    , Task.perform (mapMsg << BeginPreviousMoveAnimation) (Task.succeed ( basicMove, fenAfterMove ))
+                ( basicMove, fenAfterMove ) :: [] ->
+                    ( makeGame availableMoves fenAfterMove
+                    , Task.perform (mapMsg << BeginPreviousMoveAnimation) (Task.succeed { a = basicMove, b = fenAfterMove, c = availableMoves })
+                    )
+
+                ( basicMove, fenAfterMove ) :: ( _, currentFen ) :: _ ->
+                    ( makeGame availableMoves currentFen
+                    , Task.perform (mapMsg << BeginPreviousMoveAnimation) (Task.succeed { a = basicMove, b = fenAfterMove, c = availableMoves })
                     )
 
         --case previousMoves of
@@ -146,13 +151,10 @@ init availableMoves currentState ((PreviousMovesSafe fen pm) as previousMoves) m
         --        -- Animate to current state.
         --        -- Navigation buttons on bottom to progress?
         --        ( makeGame availableMoves state previousMoves, Task.perform (mapMsg << BeginPreviousMoveAnimation) (Task.succeed m) )
-        hist =
-            Historical fen dl
-
         --hist =
         --    Historical fen (DirectionalList.fromList pm |> DirectionalList.toEnd)
     in
-    ( Model game hist Logic.Black [] [] NoPieceInHand Nothing Nothing
+    ( Model game (Historical previousMoves) Logic.Black [] [] NoPieceInHand Nothing Nothing
     , Cmd.batch
         [ -- TODO: Make the square size be dynamic based on BrowserBoard so that this may go away.
           Task.attempt (mapMsg << SetSquareSize) (Browser.Dom.getElement "main-board")
@@ -164,32 +166,35 @@ init availableMoves currentState ((PreviousMovesSafe fen pm) as previousMoves) m
     )
 
 
-makeGame : List Move -> Fen -> PreviousMovesSafe -> Logic.Game
-makeGame availableMoves (Fen currentState) recentMove =
+makeGame : List Move -> Fen -> Logic.Game
+makeGame availableMoves (Fen currentState) =
     Result.withDefault Logic.blankBoard <| Logic.fromFen availableMoves currentState
 
 
 moveMade : List Move -> PreviousMovesSafe -> (Msg -> msg) -> Model -> ( Model, Cmd msg )
-moveMade availableMoves ((PreviousMovesSafe fen pm) as previousMoves) mapMsg model =
+moveMade availableMoves (PreviousMovesSafe pm) mapMsg model =
     let
-        dl =
-            DirectionalList.fromList pm |> DirectionalList.toEnd
+        previousMoves =
+            Debug.log "previous moveMade" (List.reverse pm)
 
         ( game, additionalSetupCommands ) =
-            case DirectionalList.selected dl of
-                Nothing ->
+            case previousMoves of
+                [] ->
                     -- Opening Move
-                    ( makeGame availableMoves fen previousMoves, Cmd.none )
+                    --( makeGame availableMoves model.currentState, Cmd.none )
+                    ( Debug.log "model" model.game, Cmd.none )
 
-                Just ( basicMove, fenAfterMove ) ->
-                    ( makeGame availableMoves fenAfterMove previousMoves
-                    , Task.perform (mapMsg << BeginPreviousMoveAnimation) (Task.succeed ( basicMove, fenAfterMove ))
+                ( basicMove, fenAfterMove ) :: [] ->
+                    ( Debug.log "a move" makeGame availableMoves fenAfterMove
+                    , Task.perform (mapMsg << BeginPreviousMoveAnimation) (Task.succeed { a = basicMove, b = fenAfterMove, c = availableMoves })
                     )
 
-        updatedHist =
-            Historical fen dl
+                ( basicMove, fenAfterMove ) :: ( _, currentFen ) :: _ ->
+                    ( Debug.log "more than one" makeGame availableMoves currentFen
+                    , Task.perform (mapMsg << BeginPreviousMoveAnimation) (Task.succeed { a = basicMove, b = fenAfterMove, c = availableMoves })
+                    )
     in
-    ( { model | game = game, movesHistorical = updatedHist }, additionalSetupCommands )
+    ( { model | game = game, movesHistorical = Historical previousMoves }, additionalSetupCommands )
 
 
 
@@ -197,7 +202,7 @@ moveMade availableMoves ((PreviousMovesSafe fen pm) as previousMoves) mapMsg mod
 
 
 type Msg
-    = BeginPreviousMoveAnimation ( BasicMove, Fen )
+    = BeginPreviousMoveAnimation { a : BasicMove, b : Fen, c : List Move }
     | ChangeTeam Team
     | FindReinforcements Position ()
     | MakeMove Move
@@ -218,8 +223,8 @@ type Msg
 update : Callbacks msg -> Msg -> Model -> ( Model, Cmd msg )
 update callbacks msg model =
     case msg of
-        BeginPreviousMoveAnimation ( moveCommand, fen ) ->
-            ( model, Cmd.none )
+        BeginPreviousMoveAnimation { a, b, c } ->
+            ( { model | game = makeGame c b }, Cmd.none )
 
         ChangeTeam color ->
             ( { model | playerTeam = color }, Cmd.none )
@@ -640,12 +645,12 @@ viewSquare game movesHistorical reinforcing opponentReinforcing playerColor posi
 
 
 isRecentMove : Position -> Historical -> Bool
-isRecentMove position (Historical _ directional) =
-    case DirectionalList.selected directional of
-        Nothing ->
+isRecentMove position (Historical directional) =
+    case directional of
+        [] ->
             False
 
-        Just ( BasicMove { from, to }, _ ) ->
+        ( BasicMove { from, to }, _ ) :: _ ->
             from == position || to == position
 
 
