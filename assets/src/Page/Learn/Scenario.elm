@@ -36,6 +36,7 @@ import Result.Extra
 
 
 -- SCENARIO
+-- TODO: Lock this down.
 
 
 type Scenario2
@@ -51,19 +52,7 @@ type alias Scenario =
     }
 
 
-
---type alias PreviousMoves =
---    DirectionalList PreviousMove
---type PreviousMove
---    = FirstMove FenAfterMove
---    | OngoingMove FenAfterMove MoveCommand
-
-
-{-| Starting fen (can't have a valid game without one!). But before any moves have been played. . . we don't have a previous.
-
-And then any moves that have been played.
-These are kept as a list of tuples with the command and corresponding fen afterwards.
-
+{-| Moves that have been played with list of tuples with the command and corresponding fen that comes up afterwards.
 -}
 type PreviousMovesSafe
     = PreviousMovesSafe (List ( BasicMove, Fen ))
@@ -127,14 +116,6 @@ movePlayedSelection =
     SelectionSet.succeed (\rawPrevious rawFen -> Tuple.pair (MoveCommand rawPrevious) (Fen rawFen))
         |> with Api.Object.MovePlayed.previousMove
         |> with Api.Object.MovePlayed.fenAfterMove
-
-
-
---recentMoveSelection : SelectionSet RecentMove Api.Object.RecentMove
---recentMoveSelection =
---    SelectionSet.succeed (\a b -> RecentMove { recentFen = a, moveCommand = b })
---        |> with Api.Object.RecentMove.fenBeforeMove
---        |> with Api.Object.RecentMove.recentMoveCommand
 
 
 getScenario : Backend -> Id -> (Result (Graphql.Http.Error Scenario) Scenario -> msg) -> Cmd msg

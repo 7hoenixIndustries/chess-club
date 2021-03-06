@@ -57,8 +57,8 @@ defmodule ChessClub.Chess.Game do
     %{"moves_played" => moves_played} =
       Poison.decode!(:python.call(server, :app, :moves_played, [request_body]))
 
-    moves_played = Enum.map(moves_played, &to_previous_move/1)
-    {:reply, %{moves_played: moves_played}, %{chess_server: server}}
+    played = Enum.map(moves_played, &to_previous_move/1)
+    {:reply, %{moves_played: played}, %{chess_server: server}}
   end
 
   def handle_call({:legal_move, %{fen: fen, moves_made: moves_made, move: move}}, _from, %{

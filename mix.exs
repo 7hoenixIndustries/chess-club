@@ -92,7 +92,7 @@ defmodule ChessClub.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       ci: ["cmd ./scripts/ci.bash"],
-      "test.once": [
+      test: [
         "ecto.drop --quiet",
         "cmd printf 'Dropping/creating/migrating test database'",
         "cmd printf '.'",

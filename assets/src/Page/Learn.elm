@@ -58,11 +58,19 @@ init backend session =
             )
 
         Nothing ->
+            let
+                runSpecific =
+                    --Debug.log "Ensuring not possible to release" (Just "14")
+                    Nothing
+            in
             ( Model Nothing session Loading NotConnected Nothing
             , Cmd.batch
-                [ Scenario.getScenarios backend GotScenarios
+                [ case runSpecific of
+                    Nothing ->
+                        Scenario.getScenarios backend GotScenarios
 
-                --[ Scenario.getScenario backend (Api.Scalar.Id "3") GotScenario
+                    Just id ->
+                        Scenario.getScenario backend (Api.Scalar.Id id) GotScenario
                 ]
             )
 

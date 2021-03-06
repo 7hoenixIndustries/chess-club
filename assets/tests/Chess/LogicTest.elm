@@ -832,5 +832,43 @@ all =
                         in
                         Expect.equal [] (Chess.canMoveTo Position.b3 game)
                 ]
+            , describe "present recentMove" <|
+                [ describe "when black" <|
+                    [ test "south west" <|
+                        \() ->
+                            Chess.findVectors Position.h1 Position.g2 Chess.Black
+                                |> Expect.equal ( 1, 1 )
+                    , test "south east" <|
+                        \() ->
+                            Chess.findVectors Position.g1 Position.h2 Chess.Black
+                                |> Expect.equal ( -1, 1 )
+                    , test "north east" <|
+                        \() ->
+                            Chess.findVectors Position.h2 Position.g1 Chess.Black
+                                |> Expect.equal ( 1, -1 )
+                    , test "north west" <|
+                        \() ->
+                            Chess.findVectors Position.g2 Position.h1 Chess.Black
+                                |> Expect.equal ( -1, -1 )
+                    ]
+                , describe "when white" <|
+                    [ test "south west" <|
+                        \() ->
+                            Chess.findVectors Position.a8 Position.b7 Chess.White
+                                |> Expect.equal ( 1, 1 )
+                    , test "south east" <|
+                        \() ->
+                            Chess.findVectors Position.b8 Position.a7 Chess.White
+                                |> Expect.equal ( -1, 1 )
+                    , test "north east" <|
+                        \() ->
+                            Chess.findVectors Position.a7 Position.b8 Chess.White
+                                |> Expect.equal ( 1, -1 )
+                    , test "north west" <|
+                        \() ->
+                            Chess.findVectors Position.b7 Position.a8 Chess.White
+                                |> Expect.equal ( -1, -1 )
+                    ]
+                ]
             ]
         ]
