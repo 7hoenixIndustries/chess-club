@@ -113,6 +113,20 @@ MIX_ENV=prod mix ansible.playbook setup
 
 ---------------------------------------------------------------------------------------
 
+## Troubleshooting Issues
+
+---------------------------------------------------------------------------------------
+
+### Problem with Static assets (Tailwind classes) not showing up in front end.
+
+[If you write a dynamic css class then it will get purged out](https://tailwindcss.com/docs/optimizing-for-production#writing-purgeable-html)! 
+
+Elm does as well.
+
+One way to fix this is to add the class on a fake element: See the Page/Learn.elm#makeTreeShakingHappy function for and example.
+
+---------------------------------------------------------------------------------------
+
 ## TODO (LfG - Looking for Group)
 
 ---------------------------------------------------------------------------------------

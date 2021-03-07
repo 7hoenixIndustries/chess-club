@@ -329,7 +329,49 @@ viewScenario scenario chessModel subscriptionStatus =
     div [ class "container mx-auto" ]
         [ viewConnection subscriptionStatus
         , Html.map ChessMsg (lazy Chess.view chessModel)
+        , makeTreeShakingHappy
         ]
+
+
+makeTreeShakingHappy : Html msg
+makeTreeShakingHappy =
+    div
+        [ classList
+            [ ( "translate-x-0-squares", True )
+            , ( "translate-x-1-squares", True )
+            , ( "translate-x-2-squares", True )
+            , ( "translate-x-3-squares", True )
+            , ( "translate-x-4-squares", True )
+            , ( "translate-x-5-squares", True )
+            , ( "translate-x-6-squares", True )
+            , ( "translate-x-7-squares", True )
+            , ( "translate-x-neg-0-squares", True )
+            , ( "translate-x-neg-1-squares", True )
+            , ( "translate-x-neg-2-squares", True )
+            , ( "translate-x-neg-3-squares", True )
+            , ( "translate-x-neg-4-squares", True )
+            , ( "translate-x-neg-5-squares", True )
+            , ( "translate-x-neg-6-squares", True )
+            , ( "translate-x-neg-7-squares", True )
+            , ( "translate-y-0-squares", True )
+            , ( "translate-y-1-squares", True )
+            , ( "translate-y-2-squares", True )
+            , ( "translate-y-3-squares", True )
+            , ( "translate-y-4-squares", True )
+            , ( "translate-y-5-squares", True )
+            , ( "translate-y-6-squares", True )
+            , ( "translate-y-7-squares", True )
+            , ( "translate-y-neg-0-squares", True )
+            , ( "translate-y-neg-1-squares", True )
+            , ( "translate-y-neg-2-squares", True )
+            , ( "translate-y-neg-3-squares", True )
+            , ( "translate-y-neg-4-squares", True )
+            , ( "translate-y-neg-5-squares", True )
+            , ( "translate-y-neg-6-squares", True )
+            , ( "translate-y-neg-7-squares", True )
+            ]
+        ]
+        []
 
 
 backgroundColor : String -> String

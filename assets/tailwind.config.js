@@ -1,12 +1,18 @@
 module.exports = {
-  purge: [
-    "../**/*.html.eex",
-    "../**/*.html.leex",
-    "../**/views/**/*.ex",
-    "../**/live/**/*.ex",
-    "./js/**/*.js",
-    './**/*.elm',
-  ],
+  purge: {
+      content: [
+        "../**/*.html.eex",
+        "../**/*.html.leex",
+        "../**/views/**/*.ex",
+        "../**/live/**/*.ex",
+        "./js/**/*.js",
+        './**/*.elm',
+      ],
+      // Dunno if we need this or not.
+      options: {
+        safelist: [/translate-x-*-squares/]
+      }
+  },
   darkMode: 'media', // or 'media' or 'class' or false
   theme: {
     extend: {
@@ -50,7 +56,7 @@ module.exports = {
         'neg-6-squares': '-600%',
         'neg-7-squares': '-700%',
       }
-    },
+    }
   },
   variants: {
     extend: {},
