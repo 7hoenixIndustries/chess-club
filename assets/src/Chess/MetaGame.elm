@@ -71,13 +71,13 @@ type alias Callbacks msg =
 
 
 type alias Model =
-    { game : Logic.Game
+    { game : AnimatedGame
     , movesHistorical : Historical
     , playerTeam : Team
     , reinforcing : List Position
     , opponentReinforcing : List Position
     , dragStuff : DragStuff
-    , previousMove : Maybe BasicMoveWithPiece
+    , previousMove : Maybe BasicMoveWithPieces
 
     -- TODO: Bleh. Do not like the direct dependency on Browser.Dom.Element
     -- Also that its a maybe.
@@ -87,12 +87,32 @@ type alias Model =
     }
 
 
+type AnimatedGame
+    = Animating { before : Logic.Game, after : Logic.Game }
+    | DoneAnimating Logic.Game
+
+
+
+-- STEPS to make this work with the simple animation library
+-- [X] "normal moves" on init. Remove piece from board and show it.
+-- [X] When picking up a piece and then putting it back. . . have it return with the updated board (not the animation one)
+-- [X] captures: if piece in 'to' square. . . have it fade out opacity.
+-- [X] FIX turn post animation.
+-- [X] FIX background color on animation.
+-- [] IF you made the move do not show the animation when moveMade is called.
+-- [] IF you didn't, then do.
+-- [] Add click handler for animation piece
+-- [] FIX changeTeam to redo animation
+-- [] Castling. . . find both and handle.
+-- [] en passant . . . remove with opacity
+
+
 type Historical
     = Historical (List ( BasicMove, Fen ))
 
 
-type BasicMoveWithPiece
-    = BasicMoveWithPiece { from : Position, to : Position, piece : Logic.Piece }
+type BasicMoveWithPieces
+    = BasicMoveWithPieces { from : Position, to : Position, pieceMoved : Logic.Piece, pieceCaptured : Maybe Logic.Piece }
 
 
 type DragStuff
@@ -120,34 +140,58 @@ init availableMoves currentState (PreviousMovesSafe pm) mapMsg =
         previousMoves =
             List.reverse pm
 
-        ( game, additionalSetupCommands ) =
+        ( game, basicMoveWithPieces ) =
             case previousMoves of
                 [] ->
                     -- Opening Move
-                    ( makeGame availableMoves currentState, Cmd.none )
+                    ( DoneAnimating <| makeGame availableMoves currentState, Nothing )
 
                 ( basicMove, fenAfterMove ) :: [] ->
-                    ( makeGame availableMoves currentState
-                    , Task.perform mapMsg (runAnimationInOneSecond basicMove fenAfterMove availableMoves)
-                    )
+                    case makeGameForAnimating availableMoves currentState basicMove of
+                        Ok ( g, bMWP ) ->
+                            ( Animating { before = g, after = makeGame availableMoves fenAfterMove }
+                            , Just bMWP
+                            )
+
+                        Err _ ->
+                            ( DoneAnimating Logic.blankBoard, Nothing )
 
                 ( basicMove, fenAfterMove ) :: ( _, currentFen ) :: _ ->
-                    ( makeGame availableMoves currentFen
-                    , Task.perform mapMsg (runAnimationInOneSecond basicMove fenAfterMove availableMoves)
-                    )
+                    case makeGameForAnimating availableMoves currentFen basicMove of
+                        Ok ( g, bMWP ) ->
+                            ( Animating { before = g, after = makeGame availableMoves fenAfterMove }
+                            , Just bMWP
+                            )
+
+                        Err _ ->
+                            ( DoneAnimating Logic.blankBoard, Nothing )
     in
-    ( Model game (Historical previousMoves) Logic.Black [] [] NoPieceInHand Nothing Nothing
+    ( Model game (Historical previousMoves) Logic.Black [] [] NoPieceInHand basicMoveWithPieces Nothing
     , Cmd.batch
         [ Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
-        , additionalSetupCommands
         ]
     )
 
 
-runAnimationInOneSecond : BasicMove -> Fen -> List Move -> Task x Msg
-runAnimationInOneSecond basicMove fenAfterMove availableMoves =
-    Process.sleep 1000
-        |> Task.andThen (\_ -> Task.succeed <| BeginPreviousMoveAnimation { previousMove = basicMove, fenAfterMove = fenAfterMove, availableMoves = availableMoves })
+makeGameForAnimating : List Move -> Fen -> BasicMove -> Result String ( Logic.Game, BasicMoveWithPieces )
+makeGameForAnimating availableMoves (Fen currentState) (BasicMove { from, to }) =
+    let
+        g =
+            Logic.fromFen availableMoves currentState
+    in
+    case g of
+        Ok gg ->
+            case Logic.popPiece from gg of
+                ( Just p, ggg ) ->
+                    case Logic.popPiece to ggg of
+                        ( pieceTo, gggg ) ->
+                            Ok ( Logic.nextTurn gggg, BasicMoveWithPieces { from = from, to = to, pieceMoved = p, pieceCaptured = pieceTo } )
+
+                ( Nothing, _ ) ->
+                    Err "no piece found in move"
+
+        Err fenParsingFailure ->
+            Err fenParsingFailure
 
 
 makeGame : List Move -> Fen -> Logic.Game
@@ -162,24 +206,26 @@ moveMade availableMoves (PreviousMovesSafe pm) mapMsg model =
 
 moveMadeWithAnimation : List Move -> Historical -> (Msg -> msg) -> Model -> ( Model, Cmd msg )
 moveMadeWithAnimation availableMoves (Historical previousMoves) toMsg model =
-    let
-        ( game, additionalSetupCommands ) =
-            case previousMoves of
-                [] ->
-                    -- Opening Move
-                    ( model.game, Cmd.none )
-
-                ( basicMove, fenAfterMove ) :: [] ->
-                    ( makeGame availableMoves fenAfterMove
-                    , Task.perform toMsg (runAnimationInOneSecond basicMove fenAfterMove availableMoves)
-                    )
-
-                ( basicMove, fenAfterMove ) :: ( _, currentFen ) :: _ ->
-                    ( makeGame availableMoves currentFen
-                    , Task.perform toMsg (runAnimationInOneSecond basicMove fenAfterMove availableMoves)
-                    )
-    in
-    ( { model | game = game, movesHistorical = Historical previousMoves }, additionalSetupCommands )
+    --let
+    --    ( game, additionalSetupCommands ) =
+    --        case previousMoves of
+    --            [] ->
+    --                -- Opening Move
+    --                ( model.game, Cmd.none )
+    --
+    --            ( basicMove, fenAfterMove ) :: [] ->
+    --                ( makeGame availableMoves fenAfterMove
+    --                , Task.perform toMsg (runAnimationInOneSecond basicMove fenAfterMove availableMoves)
+    --                )
+    --
+    --            ( basicMove, fenAfterMove ) :: ( _, currentFen ) :: _ ->
+    --                ( makeGame availableMoves currentFen
+    --                , Task.perform toMsg (runAnimationInOneSecond basicMove fenAfterMove availableMoves)
+    --                )
+    --in
+    --( { model | game = game, movesHistorical = Historical previousMoves }, additionalSetupCommands )
+    -- TODO
+    ( model, Cmd.none )
 
 
 
@@ -209,22 +255,22 @@ update : Callbacks msg -> Msg -> Model -> ( Model, Cmd msg )
 update callbacks msg model =
     case msg of
         BeginPreviousMoveAnimation { previousMove, fenAfterMove, availableMoves } ->
-            let
-                (BasicMove { from, to }) =
-                    previousMove
-
-                hackedGame =
-                    makeGame availableMoves fenAfterMove
-                        |> Logic.popPiece to
-                        |> (\( p, g ) -> Prelude.maybe model.game (\pp -> Logic.addPiece pp from g) p)
-            in
-            ( { model | game = hackedGame }, Cmd.none )
+            --let
+            --    (BasicMove { from, to }) =
+            --        previousMove
+            --
+            --    hackedGame =
+            --        makeGame availableMoves fenAfterMove
+            --            |> Logic.popPiece to
+            --            |> (\( p, g ) -> Prelude.maybe model.game (\pp -> Logic.addPiece pp from g) p)
+            --in
+            ( model, Cmd.none )
 
         BeginPreviousMoveAnimation2 ->
             ( model, Cmd.none )
 
         ChangeTeam color ->
-            moveMadeWithAnimation (Dict.toList model.game.moves |> List.map Tuple.second) model.movesHistorical callbacks.mapMsg { model | playerTeam = color }
+            moveMadeWithAnimation (Dict.toList (mapAnimating model.game |> .moves) |> List.map Tuple.second) model.movesHistorical callbacks.mapMsg { model | playerTeam = color }
 
         FindReinforcements currentPosition _ ->
             case model.dragStuff of
@@ -232,17 +278,21 @@ update callbacks msg model =
                     ( { model | reinforcing = [], opponentReinforcing = [] }, Cmd.none )
 
                 PieceInHand { startingPosition } ->
+                    let
+                        gg =
+                            mapAnimating model.game
+                    in
                     ( { model
                         | reinforcing =
                             reinforcingSquares
                                 { starting = startingPosition, current = currentPosition }
-                                (Logic.canAttack currentPosition model.game)
-                                model.game.moves
+                                (Logic.canAttack currentPosition gg)
+                                gg.moves
                         , opponentReinforcing =
                             reinforcingSquares
                                 { starting = startingPosition, current = currentPosition }
-                                (Logic.canAttack currentPosition (Logic.nextTurn model.game |> Logic.removePiece currentPosition))
-                                model.game.moves
+                                (Logic.canAttack currentPosition (Logic.nextTurn gg |> Logic.removePiece currentPosition))
+                                gg.moves
                       }
                     , Cmd.none
                     )
@@ -265,7 +315,7 @@ update callbacks msg model =
                                 , currentPosition = startingPosition
                                 }
                     in
-                    ( { model | dragStuff = initialDragStuff, game = removePiece startingPosition model.game, opponentReinforcing = [] }
+                    ( { model | dragStuff = initialDragStuff, game = DoneAnimating <| removePiece startingPosition (mapAnimating model.game), opponentReinforcing = [] }
                     , Task.perform (callbacks.mapMsg << FindReinforcements startingPosition) (Task.succeed ())
                     )
 
@@ -291,7 +341,7 @@ update callbacks msg model =
                                     { dragStuffInner | dragState = updatedDragState }
 
                                 Just browserBoard ->
-                                    case findCurrentPosition dragState browserBoard.element model.game.turn of
+                                    case findCurrentPosition dragState browserBoard.element (mapAnimating model.game |> .turn) of
                                         Nothing ->
                                             { dragStuffInner | dragState = updatedDragState }
 
@@ -331,27 +381,27 @@ update callbacks msg model =
                     ( model, Cmd.none )
 
                 Ok boardElement ->
-                    case positionOnBoard dragStuffInner boardElement.element model.game.turn of
+                    case positionOnBoard dragStuffInner boardElement.element (mapAnimating model.game |> .turn) of
                         Nothing ->
-                            ( { model | game = placePiece startingPosition piece model.game }
+                            ( { model | game = DoneAnimating <| placePiece startingPosition piece (mapAnimating model.game) }
                             , Cmd.none
                             )
 
                         Just finalPosition ->
-                            case friendlyMovesToPosition model.game.turn finalPosition startingPosition (Dict.toList model.game.moves |> List.map Tuple.second) of
+                            case friendlyMovesToPosition (mapAnimating model.game |> .turn) finalPosition startingPosition (Dict.toList (mapAnimating model.game |> .moves) |> List.map Tuple.second) of
                                 move :: [] ->
-                                    ( { model | game = placePiece finalPosition piece model.game }
+                                    ( { model | game = DoneAnimating <| placePiece finalPosition piece (mapAnimating model.game) }
                                     , Task.perform callbacks.makeMove (Task.succeed move)
                                     )
 
                                 promotionMove :: _ ->
                                     -- TODO: Hardcoded to promote to Advisor.
-                                    ( { model | game = placePiece finalPosition piece model.game }
+                                    ( { model | game = DoneAnimating <| placePiece finalPosition piece (mapAnimating model.game) }
                                     , Task.perform callbacks.makeMove (Task.succeed promotionMove)
                                     )
 
                                 [] ->
-                                    ( { model | game = placePiece startingPosition piece model.game }
+                                    ( { model | game = DoneAnimating <| placePiece startingPosition piece (mapAnimating model.game) }
                                     , Cmd.none
                                     )
 
@@ -369,6 +419,16 @@ update callbacks msg model =
                 [ Task.attempt (callbacks.mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
                 ]
             )
+
+
+mapAnimating : AnimatedGame -> Logic.Game
+mapAnimating animatedGame =
+    case animatedGame of
+        Animating { after } ->
+            after
+
+        DoneAnimating g ->
+            g
 
 
 
@@ -482,12 +542,22 @@ positionIsOnBoard x y element =
 
 
 view : Model -> Html Msg
-view { game, movesHistorical, reinforcing, opponentReinforcing, playerTeam, dragStuff, browserBoard } =
-    div [ class "container mx-auto" ]
-        [ lazy2 viewTurn game playerTeam
-        , lazy3 viewBoard (SquareStuff game movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
-        , lazy viewSettings playerTeam
-        ]
+view { game, movesHistorical, reinforcing, opponentReinforcing, playerTeam, dragStuff, browserBoard, previousMove } =
+    case game of
+        Animating { before } ->
+            div [ class "container mx-auto" ]
+                [ lazy2 viewTurn before playerTeam
+                , Maybe.map2 (lazy4 viewPreviousMove before playerTeam) previousMove browserBoard |> Maybe.withDefault (span [] [])
+                , lazy3 viewBoard (SquareStuff before movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
+                , lazy viewSettings playerTeam
+                ]
+
+        DoneAnimating g ->
+            div [ class "container mx-auto" ]
+                [ lazy2 viewTurn g playerTeam
+                , lazy3 viewBoard (SquareStuff g movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
+                , lazy viewSettings playerTeam
+                ]
 
 
 viewSettings : Team -> Html Msg
@@ -533,7 +603,6 @@ viewBoard : SquareStuff -> DragStuff -> Maybe Browser.Dom.Element -> Html Msg
 viewBoard ({ game, playerColor, historical } as cellStuff) dragStuff browserBoard =
     div []
         [ Prelude.maybe (span [] []) (lazy4 viewGhostSquare game playerColor dragStuff) browserBoard
-        , Prelude.maybe (span [] []) (lazy4 viewPreviousMove game playerColor historical) browserBoard
         , div
             [ id "main-board"
             , classList
@@ -614,133 +683,112 @@ viewGhostSquare game playerColor dragStuff browserBoard =
                 [ findSvg piece [] ]
 
 
-viewPreviousMove : Logic.Game -> Team -> Historical -> Browser.Dom.Element -> Html Msg
-viewPreviousMove game playerColor historical browserBoard =
-    case getPreviousMove historical of
-        Nothing ->
-            div [] []
+viewPreviousMove : Logic.Game -> Team -> BasicMoveWithPieces -> Browser.Dom.Element -> Html Msg
+viewPreviousMove game playerColor (BasicMoveWithPieces { from, to, pieceMoved, pieceCaptured }) browserBoard =
+    let
+        squareSize =
+            (browserBoard.element.width / 8)
+                |> Debug.log "squareSize"
+    in
+    div []
+        [ Animated.div (runFull { starting = Position.toRaw from, diff = Position.toRaw to } playerColor squareSize)
+            [ classList
+                [ --( "bg-transparent", True )
+                  ( "grid-cols-none", True )
+                , ( "absolute", True )
+                , ( "z-50", True )
+                , ( "border-2", True )
 
-        Just ((BasicMove { from, to }) as move) ->
-            let
-                ( xDiff, yDiff ) =
-                    findPreviousMoveTransformation move playerColor
+                --, ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
+                ]
+            , styleList
+                [ "width: " ++ String.fromInt (round squareSize) ++ "px"
+                , "height: " ++ String.fromInt (round squareSize) ++ "px"
+                ]
+            ]
+            [ findSvg pieceMoved [] ]
+        , case pieceCaptured of
+            Nothing ->
+                div [] []
 
-                squareSize =
-                    browserBoard.element.width / 8
-
-                ( startingX, startingY ) =
-                    --( browserBoard.element.x + (squareSize / 2), browserBoard.element.y + (squareSize / 2) )
-                    ( browserBoard.element.x, browserBoard.element.y )
-
-                ( x, y ) =
-                    ( 300, 300 )
-            in
-            div []
-                [ Animated.div (runFull { starting = Position.toRaw from, diff = Position.toRaw to } playerColor squareSize)
+            Just pC ->
+                Animated.div (runHide { starting = Position.toRaw to } playerColor squareSize)
                     [ classList
-                        [ ( "bg-transparent", True )
-                        , ( "grid-cols-none", True )
+                        [ --( "bg-transparent", True )
+                          ( "grid-cols-none", True )
                         , ( "absolute", True )
                         , ( "z-50", True )
-                        , ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
+
+                        --, ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
                         ]
-
-                    --, styleList
-                    --    [ "left: " ++ String.fromInt (x - (squareSize // 2)) ++ "px"
-                    --    , "top: " ++ String.fromInt (y - (squareSize // 2)) ++ "px"
-                    --    ]
+                    , styleList
+                        [ "width: " ++ String.fromInt (round squareSize) ++ "px"
+                        , "height: " ++ String.fromInt (round squareSize) ++ "px"
+                        ]
                     ]
-                    [ blackAdvisor [] ]
+                    [ findSvg pC [] ]
+        ]
 
-                --, Animated.div (runFull { starting = Position.toRaw to, diff = ( xDiff, yDiff ) } playerColor squareSize)
-                --    [ classList
-                --        [ ( "bg-transparent", True )
-                --        , ( "grid-cols-none", True )
-                --        , ( "absolute", True )
-                --        , ( "z-50", True )
-                --        , ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
-                --        ]
-                --
-                --    --, styleList
-                --    --    [ "left: " ++ String.fromInt (x - (squareSize // 2)) ++ "px"
-                --    --    , "top: " ++ String.fromInt (y - (squareSize // 2)) ++ "px"
-                --    --    ]
-                --    ]
-                --    [ blackAdvisor [] ]
-                ]
+
+runHide : { starting : ( Int, Int ) } -> Team -> Float -> Animation
+runHide { starting } playerColor squareSize =
+    let
+        borderSize =
+            -2
+    in
+    Animation.steps { startAt = [ squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ], options = [ Animation.delay 500 ] }
+        [ Animation.step 700 [ P.opacity 0, squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ]
+        ]
 
 
 runFull : { starting : ( Int, Int ), diff : ( Int, Int ) } -> Team -> Float -> Animation
 runFull { starting, diff } playerColor squareSize =
     let
-        ( startingX, startingY ) =
-            starting
-
         borderSize =
-            -2
-    in
-    Animation.steps { startAt = [ squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ], options = [ Animation.loop ] }
-        [ Animation.wait 3000
-        , Animation.step 700 [ squareLocation diff squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ]
-        , Animation.wait 3000
+            case playerColor of
+                Logic.Black ->
+                    -1
 
-        --, Animation.wait 3000
-        --, Animation.step 700 [ P.xy (7 * squareSize + borderSize) borderSize ]
-        --, Animation.wait 3000
-        --, Animation.step 700 [ P.xy (7 * squareSize + borderSize) (7 * squareSize + borderSize) ]
-        --, Animation.wait 3000
-        --, Animation.step 700 [ P.xy borderSize (7 * squareSize + borderSize) ]
-        --, Animation.wait 3000
-        --, Animation.step 700 [ P.xy borderSize borderSize ]
+                Logic.White ->
+                    0
+    in
+    Animation.steps
+        { startAt =
+            [ squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y)
+            ]
+        , options = []
+        }
+        [ Animation.wait 500
+        , Animation.step 700 [ squareLocation diff squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ]
+        , Animation.wait 300
+        , Animation.step 500
+            [ squareLocation diff squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y)
+            , P.backgroundColor "rgba(156, 163, 175, 0.5)"
+            , P.borderColor "rgba(0, 0, 0, 1)"
+            ]
         ]
 
 
 squareLocation : ( Int, Int ) -> Float -> Float -> Team -> ( Float, Float )
 squareLocation ( squareDiffX, squareDiffY ) squareSize borderSize playerColor =
     let
-        size =
-            Debug.log "size" squareSize
+        xPerspectiveCorrected =
+            case playerColor of
+                Logic.Black ->
+                    toFloat (8 - squareDiffX)
+
+                Logic.White ->
+                    toFloat (squareDiffX - 1)
+
+        yPerspectiveCorrected =
+            case playerColor of
+                Logic.Black ->
+                    toFloat (squareDiffY - 1)
+
+                Logic.White ->
+                    toFloat (8 - squareDiffY)
     in
-    case playerColor of
-        Logic.Black ->
-            ( toFloat (8 - squareDiffX) * squareSize + borderSize, toFloat (squareDiffY - 1) * squareSize + borderSize )
-
-        Logic.White ->
-            ( toFloat (squareDiffX - 1) * squareSize + borderSize, toFloat (8 - squareDiffY) * squareSize + borderSize )
-
-
-
---else
---    ( toFloat (squareDiffX - 1) * squareSize + borderSize, toFloat (8 - squareDiffY) * squareSize + borderSize )
-
-
-findPreviousMoveTransformation : BasicMove -> Team -> ( Int, Int )
-findPreviousMoveTransformation (BasicMove { from, to }) playerColor =
-    Logic.findVectors from to playerColor
-
-
-prependNegIfNegative : Int -> String
-prependNegIfNegative scalar =
-    if scalar < 0 then
-        "neg-" ++ (String.fromInt <| scalar * -1) ++ "-squares"
-
-    else
-        String.fromInt scalar ++ "-squares"
-
-
-getPreviousMove : Historical -> Maybe BasicMove
-getPreviousMove (Historical previousMoves) =
-    Maybe.map Tuple.first <| List.head previousMoves
-
-
-expandFade : Animation
-expandFade =
-    Animation.fromTo
-        { duration = 700
-        , options = [ Animation.loop ]
-        }
-        [ P.xy 200 300 ]
-        [ P.xy 300 200 ]
+    ( xPerspectiveCorrected * squareSize + borderSize, yPerspectiveCorrected * squareSize + borderSize )
 
 
 styleList : List String -> Attribute Msg
