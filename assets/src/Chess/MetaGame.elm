@@ -30,10 +30,10 @@ module Chess.MetaGame exposing
 
 import Browser.Dom
 import Browser.Events exposing (onMouseMove)
-import Chess.Logic as Logic exposing (Team)
+import Chess.Logic as Logic exposing (Piece, Team)
 import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
-import Html exposing (Attribute, Html, div, fieldset, input, label, span, text)
+import Html exposing (Attribute, Html, button, div, fieldset, input, label, span, text)
 import Html.Attributes exposing (checked, class, classList, name, type_)
 import Html.Events exposing (on, onClick, onInput, onMouseDown, onMouseLeave, onMouseOver)
 import Html.Lazy exposing (lazy, lazy2, lazy3, lazy4, lazy5, lazy6, lazy7, lazy8)
@@ -42,6 +42,9 @@ import List.Extra
 import Page.Learn.Scenario exposing (BasicMove(..), Fen(..), Move, MoveCommand, PreviousMovesSafe(..))
 import Prelude
 import Process
+import Simple.Animation as Animation exposing (Animation)
+import Simple.Animation.Animated as Animated
+import Simple.Animation.Property as P
 import Svg exposing (Svg, circle, g, svg)
 import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y, z)
 import Task exposing (Task)
@@ -74,6 +77,7 @@ type alias Model =
     , reinforcing : List Position
     , opponentReinforcing : List Position
     , dragStuff : DragStuff
+    , previousMove : Maybe BasicMoveWithPiece
 
     -- TODO: Bleh. Do not like the direct dependency on Browser.Dom.Element
     -- Also that its a maybe.
@@ -85,6 +89,10 @@ type alias Model =
 
 type Historical
     = Historical (List ( BasicMove, Fen ))
+
+
+type BasicMoveWithPiece
+    = BasicMoveWithPiece { from : Position, to : Position, piece : Logic.Piece }
 
 
 type DragStuff
@@ -128,7 +136,7 @@ init availableMoves currentState (PreviousMovesSafe pm) mapMsg =
                     , Task.perform mapMsg (runAnimationInOneSecond basicMove fenAfterMove availableMoves)
                     )
     in
-    ( Model game (Historical previousMoves) Logic.Black [] [] NoPieceInHand Nothing
+    ( Model game (Historical previousMoves) Logic.Black [] [] NoPieceInHand Nothing Nothing
     , Cmd.batch
         [ Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
         , additionalSetupCommands
@@ -180,6 +188,7 @@ moveMadeWithAnimation availableMoves (Historical previousMoves) toMsg model =
 
 type Msg
     = BeginPreviousMoveAnimation { previousMove : BasicMove, fenAfterMove : Fen, availableMoves : List Move }
+    | BeginPreviousMoveAnimation2
     | ChangeTeam Team
     | FindReinforcements Position ()
     | MakeMove Move
@@ -210,6 +219,9 @@ update callbacks msg model =
                         |> (\( p, g ) -> Prelude.maybe model.game (\pp -> Logic.addPiece pp from g) p)
             in
             ( { model | game = hackedGame }, Cmd.none )
+
+        BeginPreviousMoveAnimation2 ->
+            ( model, Cmd.none )
 
         ChangeTeam color ->
             moveMadeWithAnimation (Dict.toList model.game.moves |> List.map Tuple.second) model.movesHistorical callbacks.mapMsg { model | playerTeam = color }
@@ -518,9 +530,10 @@ type alias SquareStuff =
 
 
 viewBoard : SquareStuff -> DragStuff -> Maybe Browser.Dom.Element -> Html Msg
-viewBoard ({ game, playerColor } as cellStuff) dragStuff browserBoard =
+viewBoard ({ game, playerColor, historical } as cellStuff) dragStuff browserBoard =
     div []
         [ Prelude.maybe (span [] []) (lazy4 viewGhostSquare game playerColor dragStuff) browserBoard
+        , Prelude.maybe (span [] []) (lazy4 viewPreviousMove game playerColor historical) browserBoard
         , div
             [ id "main-board"
             , classList
@@ -529,6 +542,7 @@ viewBoard ({ game, playerColor } as cellStuff) dragStuff browserBoard =
                 ]
             ]
             (List.concatMap (viewRow cellStuff browserBoard) (List.range 1 8))
+        , button [ onClick BeginPreviousMoveAnimation2 ] [ text "Animate!" ]
         ]
 
 
@@ -600,6 +614,135 @@ viewGhostSquare game playerColor dragStuff browserBoard =
                 [ findSvg piece [] ]
 
 
+viewPreviousMove : Logic.Game -> Team -> Historical -> Browser.Dom.Element -> Html Msg
+viewPreviousMove game playerColor historical browserBoard =
+    case getPreviousMove historical of
+        Nothing ->
+            div [] []
+
+        Just ((BasicMove { from, to }) as move) ->
+            let
+                ( xDiff, yDiff ) =
+                    findPreviousMoveTransformation move playerColor
+
+                squareSize =
+                    browserBoard.element.width / 8
+
+                ( startingX, startingY ) =
+                    --( browserBoard.element.x + (squareSize / 2), browserBoard.element.y + (squareSize / 2) )
+                    ( browserBoard.element.x, browserBoard.element.y )
+
+                ( x, y ) =
+                    ( 300, 300 )
+            in
+            div []
+                [ Animated.div (runFull { starting = Position.toRaw from, diff = Position.toRaw to } playerColor squareSize)
+                    [ classList
+                        [ ( "bg-transparent", True )
+                        , ( "grid-cols-none", True )
+                        , ( "absolute", True )
+                        , ( "z-50", True )
+                        , ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
+                        ]
+
+                    --, styleList
+                    --    [ "left: " ++ String.fromInt (x - (squareSize // 2)) ++ "px"
+                    --    , "top: " ++ String.fromInt (y - (squareSize // 2)) ++ "px"
+                    --    ]
+                    ]
+                    [ blackAdvisor [] ]
+
+                --, Animated.div (runFull { starting = Position.toRaw to, diff = ( xDiff, yDiff ) } playerColor squareSize)
+                --    [ classList
+                --        [ ( "bg-transparent", True )
+                --        , ( "grid-cols-none", True )
+                --        , ( "absolute", True )
+                --        , ( "z-50", True )
+                --        , ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
+                --        ]
+                --
+                --    --, styleList
+                --    --    [ "left: " ++ String.fromInt (x - (squareSize // 2)) ++ "px"
+                --    --    , "top: " ++ String.fromInt (y - (squareSize // 2)) ++ "px"
+                --    --    ]
+                --    ]
+                --    [ blackAdvisor [] ]
+                ]
+
+
+runFull : { starting : ( Int, Int ), diff : ( Int, Int ) } -> Team -> Float -> Animation
+runFull { starting, diff } playerColor squareSize =
+    let
+        ( startingX, startingY ) =
+            starting
+
+        borderSize =
+            -2
+    in
+    Animation.steps { startAt = [ squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ], options = [ Animation.loop ] }
+        [ Animation.wait 3000
+        , Animation.step 700 [ squareLocation diff squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ]
+        , Animation.wait 3000
+
+        --, Animation.wait 3000
+        --, Animation.step 700 [ P.xy (7 * squareSize + borderSize) borderSize ]
+        --, Animation.wait 3000
+        --, Animation.step 700 [ P.xy (7 * squareSize + borderSize) (7 * squareSize + borderSize) ]
+        --, Animation.wait 3000
+        --, Animation.step 700 [ P.xy borderSize (7 * squareSize + borderSize) ]
+        --, Animation.wait 3000
+        --, Animation.step 700 [ P.xy borderSize borderSize ]
+        ]
+
+
+squareLocation : ( Int, Int ) -> Float -> Float -> Team -> ( Float, Float )
+squareLocation ( squareDiffX, squareDiffY ) squareSize borderSize playerColor =
+    let
+        size =
+            Debug.log "size" squareSize
+    in
+    case playerColor of
+        Logic.Black ->
+            ( toFloat (8 - squareDiffX) * squareSize + borderSize, toFloat (squareDiffY - 1) * squareSize + borderSize )
+
+        Logic.White ->
+            ( toFloat (squareDiffX - 1) * squareSize + borderSize, toFloat (8 - squareDiffY) * squareSize + borderSize )
+
+
+
+--else
+--    ( toFloat (squareDiffX - 1) * squareSize + borderSize, toFloat (8 - squareDiffY) * squareSize + borderSize )
+
+
+findPreviousMoveTransformation : BasicMove -> Team -> ( Int, Int )
+findPreviousMoveTransformation (BasicMove { from, to }) playerColor =
+    Logic.findVectors from to playerColor
+
+
+prependNegIfNegative : Int -> String
+prependNegIfNegative scalar =
+    if scalar < 0 then
+        "neg-" ++ (String.fromInt <| scalar * -1) ++ "-squares"
+
+    else
+        String.fromInt scalar ++ "-squares"
+
+
+getPreviousMove : Historical -> Maybe BasicMove
+getPreviousMove (Historical previousMoves) =
+    Maybe.map Tuple.first <| List.head previousMoves
+
+
+expandFade : Animation
+expandFade =
+    Animation.fromTo
+        { duration = 700
+        , options = [ Animation.loop ]
+        }
+        [ P.xy 200 300 ]
+        [ P.xy 300 200 ]
+
+
 styleList : List String -> Attribute Msg
 styleList styles =
     String.join "; " styles
@@ -623,10 +766,12 @@ viewSquare { game, historical, reinforcing, opponentReinforcing, playerColor } b
                 div
                     [ classList
                         [ ( "w-full h-full m-0", True )
-                        , ( "bg-gray-400 bg-opacity-50 border-4 border-black", isRecentMove position historical )
+                        , ( "bg-gray-400 bg-opacity-50 border-2 border-black", isRecentMove position historical )
+                        , ( "bg-gray-400 bg-opacity-50 border-2 border-red", isRecentMoveFrom position historical )
                         , ( "bg-green-500", reinforces position reinforcing )
                         , ( "bg-yellow-500", reinforces position opponentReinforcing )
-                        , ( findPreviousMoveTransformation historical playerColor position, True )
+
+                        --, ( findPreviousMoveTransformation historical playerColor position, True )
                         , ( "transition", True )
                         , ( Position.toAlgebraic position, True )
                         ]
@@ -639,7 +784,7 @@ viewSquare { game, historical, reinforcing, opponentReinforcing, playerColor } b
                 div
                     [ classList
                         [ ( "w-full h-full m-0", True )
-                        , ( "bg-gray-400 bg-opacity-50 border-4 border-black", isRecentMove position historical )
+                        , ( "bg-gray-400 bg-opacity-50 border-2 border-red", isRecentMoveFrom position historical )
                         ]
                     ]
                     []
@@ -650,8 +795,10 @@ viewSquare { game, historical, reinforcing, opponentReinforcing, playerColor } b
                 div
                     [ classList
                         [ ( "w-full h-full m-0", True )
-                        , ( "bg-gray-400 bg-opacity-50 border-4 border-black", isRecentMove position historical )
-                        , ( findPreviousMoveTransformation historical playerColor position, True )
+                        , ( "bg-gray-400 bg-opacity-50 border-2 border-black", isRecentMove position historical )
+                        , ( "bg-gray-400 bg-opacity-50 border-2 border-red", isRecentMoveFrom position historical )
+
+                        --, ( findPreviousMoveTransformation historical playerColor position, True )
                         ]
                     ]
                     [ findSvg piece [] ]
@@ -660,41 +807,12 @@ viewSquare { game, historical, reinforcing, opponentReinforcing, playerColor } b
                 div
                     [ classList
                         [ ( "w-full h-full m-0", True )
-                        , ( "bg-gray-400 bg-opacity-50 border-4 border-black", isRecentMove position historical )
-                        , ( findPreviousMoveTransformation historical playerColor position, True )
+                        , ( "bg-gray-400 bg-opacity-50 border-2 border-red", isRecentMoveFrom position historical )
+
+                        --, ( findPreviousMoveTransformation historical playerColor position, True )
                         ]
                     ]
                     []
-
-
-findPreviousMoveTransformation : Historical -> Team -> Position -> String
-findPreviousMoveTransformation historical playerColor position =
-    case getPreviousMove historical of
-        Nothing ->
-            ""
-
-        Just (BasicMove { from, to }) ->
-            if from == position then
-                Logic.findVectors from to playerColor
-                    |> Tuple.mapBoth prependNegIfNegative prependNegIfNegative
-                    |> (\( transformX, transformY ) -> "transform translate-x-" ++ transformX ++ " translate-y-" ++ transformY ++ " transition-all transition-duration-5000")
-
-            else
-                ""
-
-
-prependNegIfNegative : Int -> String
-prependNegIfNegative scalar =
-    if scalar < 0 then
-        "neg-" ++ (String.fromInt <| scalar * -1) ++ "-squares"
-
-    else
-        String.fromInt scalar ++ "-squares"
-
-
-getPreviousMove : Historical -> Maybe BasicMove
-getPreviousMove (Historical previousMoves) =
-    Maybe.map Tuple.first <| List.head previousMoves
 
 
 isRecentMove : Position -> Historical -> Bool
@@ -705,6 +823,16 @@ isRecentMove position (Historical directional) =
 
         ( BasicMove { from, to }, _ ) :: _ ->
             from == position || to == position
+
+
+isRecentMoveFrom : Position -> Historical -> Bool
+isRecentMoveFrom position (Historical directional) =
+    case directional of
+        [] ->
+            False
+
+        ( BasicMove { from }, _ ) :: _ ->
+            from == position
 
 
 reinforces : Position -> List Position -> Bool

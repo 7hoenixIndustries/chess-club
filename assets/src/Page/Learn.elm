@@ -60,8 +60,9 @@ init backend session =
         Nothing ->
             let
                 runSpecific =
-                    --Debug.log "Ensuring not possible to release" (Just "14")
-                    Nothing
+                    Debug.log "Ensuring not possible to release" (Just "15")
+
+                --Nothing
             in
             ( Model Nothing session Loading NotConnected Nothing
             , Cmd.batch
