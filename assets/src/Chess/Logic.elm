@@ -64,6 +64,7 @@ type alias Game =
     , castlingRights : List CastlingRight
     , moves : Dict MoveKey Move
     , movesByPosition : Dict PositionKey (List Move)
+    , rawFen : String
     }
 
 
@@ -271,12 +272,12 @@ asht (Occupied position piece) b =
 
 init : List Square -> Team -> Maybe Position -> List CastlingRight -> Game
 init squares turn enpassant castlingRights =
-    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Dict.empty Dict.empty
+    Game (List.foldl asht Dict.empty squares) turn enpassant castlingRights Dict.empty Dict.empty ""
 
 
 blankBoard : Game
 blankBoard =
-    Game Dict.empty Black Nothing [] Dict.empty Dict.empty
+    Game Dict.empty Black Nothing [] Dict.empty Dict.empty ""
 
 
 
@@ -877,7 +878,7 @@ fromFen moves fen =
         [ rawBoard, rawTurn, rawCastlingRights, rawEnpassant, e, f ] ->
             Result.map4
                 (\board turn enpassant castlingRights ->
-                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights (movesToDict moves) (movesDict moves)
+                    Game (Dict.fromList (List.map (\( p, lol ) -> ( Position.toRaw p, lol )) board)) turn enpassant castlingRights (movesToDict moves) (movesDict moves) fen
                 )
                 (D.decodeValue boardDecoder (E.string rawBoard))
                 (D.decodeValue turnDecoder (E.string rawTurn))
