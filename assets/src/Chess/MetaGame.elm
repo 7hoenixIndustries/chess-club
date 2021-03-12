@@ -247,7 +247,7 @@ moveMadeWithAnimation availableMoves (Historical pm) toMsg model =
                         Err e ->
                             ( DoneAnimating Logic.blankBoard, Nothing )
     in
-    ( { model | game = game, previousMove = basicMoveWithPieces, madeMoveRecently = False }
+    ( { model | game = game, previousMove = basicMoveWithPieces, madeMoveRecently = False, movesHistorical = Historical pm }
     , Cmd.none
     )
 
@@ -635,27 +635,10 @@ viewCell ({ playerColor } as cellStuff) browserBoard row column =
             [ ( "column-" ++ String.fromInt column, True )
             , ( "row-" ++ String.fromInt row, True )
             , ( shading column row, True )
+            , ( "rotated", playerColor == Logic.White )
             ]
         ]
-        [ lazy3 viewCellMore cellStuff browserBoard (Position column row) ]
-
-
-{-| This layer of nesting is here to re-rotate white squares.
-
-We were running into an issue where white would get redrawn underneath the viewCell shading layer.
-This was obvious visually when White had just made a move.
-
-It's very cludgy but seems to work.
-
--}
-viewCellMore : SquareStuff -> Maybe Browser.Dom.Element -> Position -> Html Msg
-viewCellMore ({ playerColor } as cellStuff) browserBoard position =
-    div
-        [ classList
-            [ ( "rotated", playerColor == Logic.White )
-            ]
-        ]
-        [ lazy3 viewSquare cellStuff browserBoard position ]
+        [ lazy3 viewSquare cellStuff browserBoard (Position column row) ]
 
 
 viewGhostSquare : Logic.Game -> Team -> DragStuff -> Browser.Dom.Element -> Html Msg
@@ -701,13 +684,11 @@ viewPreviousMove game playerColor (BasicMoveWithPieces { from, to, pieceMoved, p
     div []
         [ Animated.div (runFull { starting = Position.toRaw from, diff = Position.toRaw to } playerColor squareSize)
             [ classList
-                [ --( "bg-transparent", True )
-                  ( "grid-cols-none", True )
+                [ ( "grid-cols-none", True )
                 , ( "absolute", True )
                 , ( "z-50", True )
-                , ( "border-2", True )
 
-                --, ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
+                --, ( "border-2", True )
                 ]
             , styleList
                 [ "width: " ++ String.fromInt (round squareSize) ++ "px"
@@ -722,12 +703,9 @@ viewPreviousMove game playerColor (BasicMoveWithPieces { from, to, pieceMoved, p
             Just pC ->
                 Animated.div (runHide { starting = Position.toRaw to } playerColor squareSize)
                     [ classList
-                        [ --( "bg-transparent", True )
-                          ( "grid-cols-none", True )
+                        [ ( "grid-cols-none", True )
                         , ( "absolute", True )
                         , ( "z-50", True )
-
-                        --, ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
                         ]
                     , styleList
                         [ "width: " ++ String.fromInt (round squareSize) ++ "px"
@@ -755,7 +733,7 @@ runFull { starting, diff } playerColor squareSize =
         borderSize =
             case playerColor of
                 Logic.Black ->
-                    -1
+                    0
 
                 Logic.White ->
                     0
@@ -764,15 +742,16 @@ runFull { starting, diff } playerColor squareSize =
         { startAt =
             [ squareLocation starting squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y)
             ]
-        , options = [ Animation.easeOutCirc ]
+        , options = [ Animation.easeInOut ]
         }
         [ Animation.wait 500
         , Animation.step 400 [ squareLocation diff squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y) ]
         , Animation.wait 300
         , Animation.step 500
             [ squareLocation diff squareSize borderSize playerColor |> (\( x, y ) -> P.xy x y)
-            , P.backgroundColor "rgba(156, 163, 175, 0.5)"
-            , P.borderColor "rgba(0, 0, 0, 1)"
+            , P.backgroundColor "rgba(156, 163, 175, 0.7)"
+
+            --, P.borderColor "rgba(0, 0, 0, 1)"
             ]
         ]
 
@@ -816,61 +795,42 @@ getDragCoordinates { x, y, dragState } =
 
 viewSquare : SquareStuff -> Maybe Browser.Dom.Element -> Position -> Html Msg
 viewSquare { game, historical, reinforcing, opponentReinforcing, playerColor } browserBoard position =
-    if game.turn == playerColor then
-        case Dict.get (Position.toRaw position) game.occupiedSquares of
-            Just piece ->
-                div
-                    [ classList
-                        [ ( "w-full h-full m-0", True )
-                        , ( "bg-gray-400 bg-opacity-50 border-2 border-black", isRecentMove position historical )
+    case ( game.turn == playerColor, Dict.get (Position.toRaw position) game.occupiedSquares ) of
+        ( True, Just piece ) ->
+            let
+                additionalSquareClasses =
+                    [ ( "bg-green-500", reinforces position reinforcing )
+                    , ( "bg-yellow-500", reinforces position opponentReinforcing )
+                    , ( Position.toAlgebraic position, True )
+                    ]
 
-                        --, ( "bg-gray-400 bg-opacity-50 border-2 border-red", isRecentMoveFrom position historical )
-                        , ( "bg-green-500", reinforces position reinforcing )
-                        , ( "bg-yellow-500", reinforces position opponentReinforcing )
-
-                        --, ( findPreviousMoveTransformation historical playerColor position, True )
-                        , ( "transition", True )
-                        , ( Position.toAlgebraic position, True )
-                        ]
-                    , style "cursor: grab"
+                additionalSquareAttrs =
+                    [ style "cursor: grab"
                     , on "mousedown" (D.map4 StartDragging pageX pageY (D.succeed position) (D.succeed piece))
                     ]
-                    [ findSvg piece [] ]
+            in
+            basicSquare position historical additionalSquareClasses additionalSquareAttrs [ findSvg piece [] ]
 
-            Nothing ->
-                div
-                    [ classList
-                        [ ( "w-full h-full m-0", True )
+        ( False, Just piece ) ->
+            basicSquare position historical [] [] [ findSvg piece [] ]
 
-                        --, ( "bg-gray-400 bg-opacity-50 border-2 border-red", isRecentMoveFrom position historical )
-                        ]
-                    ]
-                    []
+        ( _, Nothing ) ->
+            basicSquare position historical [] [] []
 
-    else
-        case Dict.get (Position.toRaw position) game.occupiedSquares of
-            Just piece ->
-                div
-                    [ classList
-                        [ ( "w-full h-full m-0", True )
-                        , ( "bg-gray-400 bg-opacity-50 border-2 border-black", isRecentMove position historical )
 
-                        --, ( "bg-gray-400 bg-opacity-50 border-2 border-red", isRecentMoveFrom position historical )
-                        --, ( findPreviousMoveTransformation historical playerColor position, True )
-                        ]
-                    ]
-                    [ findSvg piece [] ]
-
-            Nothing ->
-                div
-                    [ classList
-                        [ ( "w-full h-full m-0", True )
-
-                        --, ( "bg-gray-400 bg-opacity-50 border-2 border-red", isRecentMoveFrom position historical )
-                        --, ( findPreviousMoveTransformation historical playerColor position, True )
-                        ]
-                    ]
-                    []
+basicSquare position historical additionalSquareClasses additionalSquareAttrs additionalSquareChildren =
+    div
+        ([ classList
+            ([ ( "w-full h-full m-0", True )
+             , ( "bg-gray-400 bg-opacity-70", isRecentMove position historical )
+             , ( "transition", True )
+             ]
+                ++ additionalSquareClasses
+            )
+         ]
+            ++ additionalSquareAttrs
+        )
+        additionalSquareChildren
 
 
 isRecentMove : Position -> Historical -> Bool
@@ -881,16 +841,6 @@ isRecentMove position (Historical directional) =
 
         ( BasicMove { from, to }, _ ) :: _ ->
             from == position || to == position
-
-
-isRecentMoveFrom : Position -> Historical -> Bool
-isRecentMoveFrom position (Historical directional) =
-    case directional of
-        [] ->
-            False
-
-        ( BasicMove { from }, _ ) :: _ ->
-            from == position
 
 
 reinforces : Position -> List Position -> Bool
