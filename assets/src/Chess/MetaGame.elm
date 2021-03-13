@@ -11,20 +11,17 @@ module Chess.MetaGame exposing
     , view
     )
 
-{-
+{-| Metagame Trainer - The perspective of the General.
 
-   Metagame Trainer - The perspective of the General.
+It aims to feed you the tactics that you would get to practice in order to be
+a [Rated](https://en.wikipedia.org/wiki/Chess_rating_system) Chess player.
 
-   It aims to feed you the tactics that you would get to practice in order to be
-   a [Rated](https://en.wikipedia.org/wiki/Chess_rating_system) Chess player.
+Motivation:
 
+Generals have colonels and stuff that would tell them tactics (and their best council generally).
+-> And to be clear. . . if you want any real success at Chess then you will get to practice those skills as well.
 
-   Motivation:
-
-   Generals have colonels and stuff that would tell them tactics (and their best council generally).
-   -> And to be clear. . . if you want any real success at Chess then you will get to practice those skills as well.
-
-   But this module is about starting to practice the meta game of Chess earlier than has previously been possible.
+But this module is about starting to practice the meta game of Chess earlier than has previously been possible.
 
 -}
 
@@ -33,8 +30,8 @@ import Browser.Events exposing (onMouseMove)
 import Chess.Logic as Logic exposing (Piece, Team)
 import Chess.Position as Position exposing (Position(..))
 import Dict exposing (Dict)
-import Html exposing (Attribute, Html, button, div, fieldset, input, label, span, text)
-import Html.Attributes exposing (checked, class, classList, name, type_)
+import Html exposing (Attribute, Html, a, button, div, fieldset, h1, h3, img, input, label, li, main_, nav, p, span, text, time, ul)
+import Html.Attributes as Attr exposing (checked, class, classList, name, type_)
 import Html.Events exposing (on, onClick, onInput, onMouseDown, onMouseLeave, onMouseOver)
 import Html.Lazy exposing (lazy, lazy2, lazy3, lazy4, lazy5, lazy6, lazy7, lazy8)
 import Json.Decode as D
@@ -45,21 +42,22 @@ import Process
 import Simple.Animation as Animation exposing (Animation)
 import Simple.Animation.Animated as Animated
 import Simple.Animation.Property as P
-import Svg exposing (Svg, circle, g, svg)
-import Svg.Attributes exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y, z)
+import Svg exposing (Svg, circle, g, path, svg)
+import Svg.Attributes as SvgAttr exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y, z)
 import Task exposing (Task)
 
 
+{-| Defined Callbacks [Interface]
 
-{-
-   This is the public interface for using this module.
+This is the public interface for using this module.
 
-   You need to declare these callbacks in order to hook it up.
+You need to declare these callbacks in order to hook it up.
 
-   - makeMove -> Hook up to it a make move function that persists user actions to the backend. Feel free to wrap it.
+  - makeMove -> Hook up to it a make move function that persists user actions to the backend. Feel free to wrap it.
+  - mapMsg -> Pass in a function that will allow us to accept our own messages. It's probably the Msg that you would Cmd.map MyMetaGameMsg Msg.
+    It's mostly used for animations.
+
 -}
-
-
 type alias Callbacks msg =
     { makeMove : Move -> msg
     , mapMsg : Msg -> msg
@@ -552,21 +550,33 @@ positionIsOnBoard x y element =
 
 view : Model -> Html Msg
 view { game, movesHistorical, reinforcing, opponentReinforcing, playerTeam, dragStuff, browserBoard, previousMove } =
+    let
+        sideBySide board =
+            div [ class "flex" ]
+                [ div [ class "flex-grow" ] [ board ]
+                , div []
+                    [ div [] [ h3 [ Attr.class "text-xl h-16" ] [ text "Details" ] ]
+                    , viewLegend (Settings { recentMove = True })
+                    ]
+                ]
+    in
     case game of
         Animating { before, after } ->
-            div [ class "container mx-auto" ]
-                [ lazy2 viewTurn before playerTeam
-                , Maybe.map2 (lazy4 viewPreviousMove before playerTeam) previousMove browserBoard |> Maybe.withDefault (span [] [])
-                , lazy3 viewBoard (SquareStuff before movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
-                , lazy viewSettings playerTeam
-                ]
+            sideBySide <|
+                div [ class "container mx-auto flex-grow" ]
+                    [ lazy2 viewTurn before playerTeam
+                    , Maybe.map2 (lazy4 viewPreviousMove before playerTeam) previousMove browserBoard |> Maybe.withDefault (span [] [])
+                    , lazy3 viewBoard (SquareStuff before movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
+                    , lazy viewSettings playerTeam
+                    ]
 
         DoneAnimating g ->
-            div [ class "container mx-auto" ]
-                [ lazy2 viewTurn g playerTeam
-                , lazy3 viewBoard (SquareStuff g movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
-                , lazy viewSettings playerTeam
-                ]
+            sideBySide <|
+                div [ class "container mx-auto flex-grow" ]
+                    [ lazy2 viewTurn g playerTeam
+                    , lazy3 viewBoard (SquareStuff g movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
+                    , lazy viewSettings playerTeam
+                    ]
 
 
 viewSettings : Team -> Html Msg
@@ -592,10 +602,11 @@ viewTurn : Logic.Game -> Team -> Html Msg
 viewTurn game playerColor =
     div [ class "container mx-auto text-2xl" ]
         [ if game.turn == playerColor then
-            text "Your turn"
+            text "You are up."
 
           else
-            text "Opponents turn"
+            --text "Opponents turn"
+            text "Waiting on them!"
         ]
 
 
@@ -646,6 +657,9 @@ viewGhostSquare game playerColor dragStuff browserBoard =
     let
         squareSize =
             round <| browserBoard.element.width / 8
+
+        browserElement =
+            Debug.log "browser" browserBoard
     in
     case dragStuff of
         NoPieceInHand ->
@@ -655,6 +669,7 @@ viewGhostSquare game playerColor dragStuff browserBoard =
             let
                 ( x, y ) =
                     getDragCoordinates dragStuffInner
+                        |> Debug.log "( x, y )"
             in
             div
                 [ classList
@@ -665,8 +680,14 @@ viewGhostSquare game playerColor dragStuff browserBoard =
                     , ( "h-12 w-12 md:h-16 md:w-16 lg:h-20 lg:w-20 2xl:h-28 2xl:w-28", True )
                     ]
                 , styleList
-                    [ "left: " ++ String.fromInt (x - (squareSize // 2)) ++ "px"
-                    , "top: " ++ String.fromInt (y - (squareSize // 2)) ++ "px"
+                    [ "left: " ++ String.fromInt x ++ "px"
+
+                    --[ "left: " ++ String.fromInt 400 ++ "px"
+                    , "top: " ++ String.fromInt y ++ "px"
+
+                    --, "top: " ++ String.fromInt 400 ++ "px"
+                    --, "left: " ++ String.fromInt (round browserBoard.element.x + (x * squareSize)) ++ "px"
+                    --, "top: " ++ String.fromInt (y - (squareSize // 2)) ++ "px"
                     , "cursor: grabbing"
                     ]
                 , on "mouseup" (D.map2 StopDragging pageX pageY)
@@ -1021,3 +1042,309 @@ pageX =
 pageY : D.Decoder Int
 pageY =
     D.field "pageY" D.int
+
+
+
+--- Generated elm
+{- This example requires Tailwind CSS v2.0+ -}
+
+
+type Settings
+    = Settings { recentMove : Bool }
+
+
+viewLegend (Settings { recentMove }) =
+    div
+        [ Attr.class "flow-root "
+        ]
+        [ div [ Attr.class "" ]
+            [ ul
+                [ Attr.class "-mb-8"
+                ]
+                [ li []
+                    [ div
+                        [ Attr.class "relative pb-8"
+                        ]
+                        [ span
+                            [ Attr.class "absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
+                            , Attr.attribute "aria-hidden" "true"
+                            ]
+                            []
+                        , div
+                            [ Attr.class "relative flex space-x-3"
+                            ]
+                            [ div []
+                                [ span
+                                    [ Attr.class "h-8 w-8 rounded-full bg-gray-400 flex items-center justify-center ring-8 ring-white"
+                                    ]
+                                    [ {- Heroicon name: solid/user -}
+                                      svg
+                                        [ SvgAttr.class "h-5 w-5 text-white"
+                                        , SvgAttr.viewBox "0 0 20 20"
+                                        , SvgAttr.fill "currentColor"
+                                        , Attr.attribute "aria-hidden" "true"
+                                        ]
+                                        [ path
+                                            [ SvgAttr.fillRule "evenodd"
+                                            , SvgAttr.d "M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                                            , SvgAttr.clipRule "evenodd"
+                                            ]
+                                            []
+                                        ]
+                                    ]
+                                ]
+                            , div
+                                [ Attr.class "min-w-0 flex-1 pt-1.5 flex justify-between space-x-4"
+                                ]
+                                [ div []
+                                    [ p
+                                        [ Attr.class "text-sm text-gray-500"
+                                        ]
+                                        [ text "Recent Move"
+                                        ]
+                                    ]
+                                , div
+                                    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
+                                    ]
+                                    [ text ":wave: Hover here.  " ]
+
+                                --[ time
+                                --    [ Attr.datetime "2020-09-20"
+                                --    ]
+                                --    [ text "Sep 20" ]
+                                --]
+                                ]
+                            ]
+                        ]
+                    ]
+
+                --, li []
+                --    [ div
+                --        [ Attr.class "relative pb-8"
+                --        ]
+                --        [ span
+                --            [ Attr.class "absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
+                --            , Attr.attribute "aria-hidden" "true"
+                --            ]
+                --            []
+                --        , div
+                --            [ Attr.class "relative flex space-x-3"
+                --            ]
+                --            [ div []
+                --                [ span
+                --                    [ Attr.class "h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center ring-8 ring-white"
+                --                    ]
+                --                    [ {- Heroicon name: solid/thumb-up -}
+                --                      svg
+                --                        [ SvgAttr.class "h-5 w-5 text-white"
+                --                        , SvgAttr.viewBox "0 0 20 20"
+                --                        , SvgAttr.fill "currentColor"
+                --                        , Attr.attribute "aria-hidden" "true"
+                --                        ]
+                --                        [ path
+                --                            [ SvgAttr.d "M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z"
+                --                            ]
+                --                            []
+                --                        ]
+                --                    ]
+                --                ]
+                --            , div
+                --                [ Attr.class "min-w-0 flex-1 pt-1.5 flex justify-between space-x-4"
+                --                ]
+                --                [ div []
+                --                    [ p
+                --                        [ Attr.class "text-sm text-gray-500"
+                --                        ]
+                --                        [ text "Advanced to phone screening by"
+                --                        , a
+                --                            [ Attr.href "#"
+                --                            , Attr.class "font-medium text-gray-900"
+                --                            ]
+                --                            [ text "Bethany Blake" ]
+                --                        ]
+                --                    ]
+                --                , div
+                --                    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
+                --                    ]
+                --                    [ time
+                --                        [ Attr.datetime "2020-09-22"
+                --                        ]
+                --                        [ text "Sep 22" ]
+                --                    ]
+                --                ]
+                --            ]
+                --        ]
+                --    ]
+                --, li []
+                --    [ div
+                --        [ Attr.class "relative pb-8"
+                --        ]
+                --        [ span
+                --            [ Attr.class "absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
+                --            , Attr.attribute "aria-hidden" "true"
+                --            ]
+                --            []
+                --        , div
+                --            [ Attr.class "relative flex space-x-3"
+                --            ]
+                --            [ div []
+                --                [ span
+                --                    [ Attr.class "h-8 w-8 rounded-full bg-green-500 flex items-center justify-center ring-8 ring-white"
+                --                    ]
+                --                    [ {- Heroicon name: solid/check -}
+                --                      svg
+                --                        [ SvgAttr.class "h-5 w-5 text-white"
+                --                        , SvgAttr.viewBox "0 0 20 20"
+                --                        , SvgAttr.fill "currentColor"
+                --                        , Attr.attribute "aria-hidden" "true"
+                --                        ]
+                --                        [ path
+                --                            [ SvgAttr.fillRule "evenodd"
+                --                            , SvgAttr.d "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                --                            , SvgAttr.clipRule "evenodd"
+                --                            ]
+                --                            []
+                --                        ]
+                --                    ]
+                --                ]
+                --            , div
+                --                [ Attr.class "min-w-0 flex-1 pt-1.5 flex justify-between space-x-4"
+                --                ]
+                --                [ div []
+                --                    [ p
+                --                        [ Attr.class "text-sm text-gray-500"
+                --                        ]
+                --                        [ text "Completed phone screening with"
+                --                        , a
+                --                            [ Attr.href "#"
+                --                            , Attr.class "font-medium text-gray-900"
+                --                            ]
+                --                            [ text "Martha Gardner" ]
+                --                        ]
+                --                    ]
+                --                , div
+                --                    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
+                --                    ]
+                --                    [ time
+                --                        [ Attr.datetime "2020-09-28"
+                --                        ]
+                --                        [ text "Sep 28" ]
+                --                    ]
+                --                ]
+                --            ]
+                --        ]
+                --    ]
+                --, li []
+                --    [ div
+                --        [ Attr.class "relative pb-8"
+                --        ]
+                --        [ span
+                --            [ Attr.class "absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
+                --            , Attr.attribute "aria-hidden" "true"
+                --            ]
+                --            []
+                --        , div
+                --            [ Attr.class "relative flex space-x-3"
+                --            ]
+                --            [ div []
+                --                [ span
+                --                    [ Attr.class "h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center ring-8 ring-white"
+                --                    ]
+                --                    [ {- Heroicon name: solid/thumb-up -}
+                --                      svg
+                --                        [ SvgAttr.class "h-5 w-5 text-white"
+                --                        , SvgAttr.viewBox "0 0 20 20"
+                --                        , SvgAttr.fill "currentColor"
+                --                        , Attr.attribute "aria-hidden" "true"
+                --                        ]
+                --                        [ path
+                --                            [ SvgAttr.d "M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z"
+                --                            ]
+                --                            []
+                --                        ]
+                --                    ]
+                --                ]
+                --            , div
+                --                [ Attr.class "min-w-0 flex-1 pt-1.5 flex justify-between space-x-4"
+                --                ]
+                --                [ div []
+                --                    [ p
+                --                        [ Attr.class "text-sm text-gray-500"
+                --                        ]
+                --                        [ text "Advanced to interview by"
+                --                        , a
+                --                            [ Attr.href "#"
+                --                            , Attr.class "font-medium text-gray-900"
+                --                            ]
+                --                            [ text "Bethany Blake" ]
+                --                        ]
+                --                    ]
+                --                , div
+                --                    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
+                --                    ]
+                --                    [ time
+                --                        [ Attr.datetime "2020-09-30"
+                --                        ]
+                --                        [ text "Sep 30" ]
+                --                    ]
+                --                ]
+                --            ]
+                --        ]
+                --    ]
+                --, li []
+                --    [ div
+                --        [ Attr.class "relative pb-8"
+                --        ]
+                --        [ div
+                --            [ Attr.class "relative flex space-x-3"
+                --            ]
+                --            [ div []
+                --                [ span
+                --                    [ Attr.class "h-8 w-8 rounded-full bg-green-500 flex items-center justify-center ring-8 ring-white"
+                --                    ]
+                --                    [ {- Heroicon name: solid/check -}
+                --                      svg
+                --                        [ SvgAttr.class "h-5 w-5 text-white"
+                --                        , SvgAttr.viewBox "0 0 20 20"
+                --                        , SvgAttr.fill "currentColor"
+                --                        , Attr.attribute "aria-hidden" "true"
+                --                        ]
+                --                        [ path
+                --                            [ SvgAttr.fillRule "evenodd"
+                --                            , SvgAttr.d "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                --                            , SvgAttr.clipRule "evenodd"
+                --                            ]
+                --                            []
+                --                        ]
+                --                    ]
+                --                ]
+                --            , div
+                --                [ Attr.class "min-w-0 flex-1 pt-1.5 flex justify-between space-x-4"
+                --                ]
+                --                [ div []
+                --                    [ p
+                --                        [ Attr.class "text-sm text-gray-500"
+                --                        ]
+                --                        [ text "Completed interview with"
+                --                        , a
+                --                            [ Attr.href "#"
+                --                            , Attr.class "font-medium text-gray-900"
+                --                            ]
+                --                            [ text "Katherine Snyder" ]
+                --                        ]
+                --                    ]
+                --                , div
+                --                    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
+                --                    ]
+                --                    [ time
+                --                        [ Attr.datetime "2020-10-04"
+                --                        ]
+                --                        [ text "Oct 4" ]
+                --                    ]
+                --                ]
+                --            ]
+                --        ]
+                --    ]
+                ]
+            ]
+        ]
