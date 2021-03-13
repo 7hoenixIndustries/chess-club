@@ -10,6 +10,7 @@ module Chess.Logic exposing
     , blankBoard
     , canAttack
     , canMoveTo
+    , castlingMove
     , findChecks
     , findVectors
     , fromFen
@@ -117,26 +118,11 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant, castlingRights
         Just ((Piece team Monarch) as piece) ->
             let
                 updatedPieces =
-                    case ( squareFrom, squareTo ) of
-                        -- NOTE: Elm doesn't appear to allow us to pattern match on our nice Position.e8 style types :(
-                        -- Monarch starting square to castling square
-                        -- e8       g8
-                        ( ( 5, 8 ), ( 7, 8 ) ) ->
-                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting = ( 8, 8 ), rookEnding = ( 6, 8 ) }
+                    case castlingMove squareFrom squareTo of
+                        Just rookMove ->
+                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game rookMove
 
-                        -- e8       c8
-                        ( ( 5, 8 ), ( 3, 8 ) ) ->
-                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting = ( 1, 8 ), rookEnding = ( 4, 8 ) }
-
-                        -- e1       c1
-                        ( ( 5, 1 ), ( 3, 1 ) ) ->
-                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting = ( 1, 1 ), rookEnding = ( 4, 1 ) }
-
-                        -- e1       g1
-                        ( ( 5, 1 ), ( 7, 1 ) ) ->
-                            makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting = ( 8, 1 ), rookEnding = ( 6, 1 ) }
-
-                        ( _, _ ) ->
+                        Nothing ->
                             Dict.remove squareFrom occupiedSquares
                                 |> Dict.insert squareTo piece
             in
@@ -169,6 +155,30 @@ makeMove squareFrom squareTo ({ occupiedSquares, turn, enpassant, castlingRights
             Dict.remove squareFrom occupiedSquares
                 |> Dict.insert squareTo piece
                 |> (\updatedPieces -> { game | occupiedSquares = updatedPieces, turn = opponentTurn turn, castlingRights = castlingRightsOnCapture squareTo turn castlingRights })
+
+
+castlingMove squareFrom squareTo =
+    case ( squareFrom, squareTo ) of
+        -- NOTE: Elm doesn't appear to allow us to pattern match on our nice Position.e8 style types :(
+        -- Monarch starting square to castling square
+        -- e8       g8
+        ( ( 5, 8 ), ( 7, 8 ) ) ->
+            Just { rookStarting = Position 8 8, rookEnding = Position 6 8 }
+
+        -- e8       c8
+        ( ( 5, 8 ), ( 3, 8 ) ) ->
+            Just { rookStarting = Position 1 8, rookEnding = Position 4 8 }
+
+        -- e1       c1
+        ( ( 5, 1 ), ( 3, 1 ) ) ->
+            Just { rookStarting = Position 1 1, rookEnding = Position 4 1 }
+
+        -- e1       g1
+        ( ( 5, 1 ), ( 7, 1 ) ) ->
+            Just { rookStarting = Position 8 1, rookEnding = Position 6 1 }
+
+        ( _, _ ) ->
+            Nothing
 
 
 removePiece square ({ occupiedSquares } as game) =
@@ -225,8 +235,8 @@ castlingRightsOnCapture squareTo team castlingRights =
 makeCastlingMove squareFrom squareTo occupiedSquares piece team turn game { rookStarting, rookEnding } =
     Dict.remove squareFrom occupiedSquares
         |> Dict.insert squareTo piece
-        |> Dict.remove rookStarting
-        |> Dict.insert rookEnding (Piece team Rook)
+        |> Dict.remove (Position.toRaw rookStarting)
+        |> Dict.insert (Position.toRaw rookEnding) (Piece team Rook)
 
 
 clearCastlingRights : Team -> List CastlingRight -> List CastlingRight

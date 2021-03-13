@@ -60,7 +60,7 @@ init backend session =
         Nothing ->
             let
                 runSpecific =
-                    Debug.log "Ensuring not possible to release" (Just "15")
+                    Debug.log "Ensuring not possible to release" (Just "17")
 
                 --Nothing
             in
@@ -228,12 +228,14 @@ stepChess model ( chessModel, chessCmds ) =
 view : Model -> Skeleton.Details Msg
 view model =
     { title = "Learn"
+    , navbarOpen = False
     , header = []
     , warning = Skeleton.NoProblems
     , attrs = [ class "container mx-auto px-4" ]
     , children =
         [ lazy3 viewLearn model.scenario model.chessModel model.subscriptionStatus
-        , lazy viewScenarios model.scenarios
+
+        --, lazy viewScenarios model.scenarios
         ]
     }
 
@@ -330,7 +332,8 @@ viewScenario scenario chessModel subscriptionStatus =
     div [ class "container mx-auto" ]
         [ viewConnection subscriptionStatus
         , Html.map ChessMsg (lazy Chess.view chessModel)
-        , makeTreeShakingHappy
+
+        --, makeTreeShakingHappy
         ]
 
 
