@@ -60,9 +60,8 @@ init backend session =
         Nothing ->
             let
                 runSpecific =
-                    Debug.log "Ensuring not possible to release" (Just "17")
-
-                --Nothing
+                    --Debug.log "Ensuring not possible to release" (Just "17")
+                    Nothing
             in
             ( Model Nothing session Loading NotConnected Nothing
             , Cmd.batch
@@ -234,8 +233,7 @@ view model =
     , attrs = [ class "container mx-auto px-4" ]
     , children =
         [ lazy3 viewLearn model.scenario model.chessModel model.subscriptionStatus
-
-        --, lazy viewScenarios model.scenarios
+        , lazy viewScenarios model.scenarios
         ]
     }
 

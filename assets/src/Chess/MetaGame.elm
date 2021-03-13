@@ -583,7 +583,13 @@ view { game, movesHistorical, reinforcing, opponentReinforcing, playerTeam, drag
                 [ div [ class "flex-grow flex-shrink-0" ] [ board ]
                 , div [ class "flex-shrink-0" ]
                     [ div [] [ h3 [ Attr.class "text-xl h-16" ] [ text "Details" ] ]
-                    , viewLegend (Settings { recentMove = True })
+                    , viewLegend
+                        (Settings
+                            { recentMove = True
+                            , reinforcing = List.isEmpty reinforcing |> not
+                            , opponentReinforcing = List.isEmpty opponentReinforcing |> not
+                            }
+                        )
                     ]
                 ]
     in
@@ -1094,10 +1100,10 @@ pageY =
 
 
 type Settings
-    = Settings { recentMove : Bool }
+    = Settings { recentMove : Bool, reinforcing : Bool, opponentReinforcing : Bool }
 
 
-viewLegend (Settings { recentMove }) =
+viewLegend (Settings { recentMove, reinforcing, opponentReinforcing }) =
     div
         [ Attr.class "flow-root "
         ]
@@ -1147,11 +1153,11 @@ viewLegend (Settings { recentMove }) =
                                         [ text "Recent Move"
                                         ]
                                     ]
-                                , div
-                                    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
-                                    ]
-                                    [ text ":wave: Hover here.  " ]
 
+                                --, div
+                                --    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
+                                --    ]
+                                --    [ text ":wave: Hover here.  " ]
                                 --[ time
                                 --    [ Attr.datetime "2020-09-20"
                                 --    ]
@@ -1219,65 +1225,9 @@ viewLegend (Settings { recentMove }) =
                 --            ]
                 --        ]
                 --    ]
-                --, li []
-                --    [ div
-                --        [ Attr.class "relative pb-8"
-                --        ]
-                --        [ span
-                --            [ Attr.class "absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
-                --            , Attr.attribute "aria-hidden" "true"
-                --            ]
-                --            []
-                --        , div
-                --            [ Attr.class "relative flex space-x-3"
-                --            ]
-                --            [ div []
-                --                [ span
-                --                    [ Attr.class "h-8 w-8 rounded-full bg-green-500 flex items-center justify-center ring-8 ring-white"
-                --                    ]
-                --                    [ {- Heroicon name: solid/check -}
-                --                      svg
-                --                        [ SvgAttr.class "h-5 w-5 text-white"
-                --                        , SvgAttr.viewBox "0 0 20 20"
-                --                        , SvgAttr.fill "currentColor"
-                --                        , Attr.attribute "aria-hidden" "true"
-                --                        ]
-                --                        [ path
-                --                            [ SvgAttr.fillRule "evenodd"
-                --                            , SvgAttr.d "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                --                            , SvgAttr.clipRule "evenodd"
-                --                            ]
-                --                            []
-                --                        ]
-                --                    ]
-                --                ]
-                --            , div
-                --                [ Attr.class "min-w-0 flex-1 pt-1.5 flex justify-between space-x-4"
-                --                ]
-                --                [ div []
-                --                    [ p
-                --                        [ Attr.class "text-sm text-gray-500"
-                --                        ]
-                --                        [ text "Completed phone screening with"
-                --                        , a
-                --                            [ Attr.href "#"
-                --                            , Attr.class "font-medium text-gray-900"
-                --                            ]
-                --                            [ text "Martha Gardner" ]
-                --                        ]
-                --                    ]
-                --                , div
-                --                    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
-                --                    ]
-                --                    [ time
-                --                        [ Attr.datetime "2020-09-28"
-                --                        ]
-                --                        [ text "Sep 28" ]
-                --                    ]
-                --                ]
-                --            ]
-                --        ]
-                --    ]
+                , viewLegendOption reinforcing "bg-green-500" "Reinforcing Move"
+                , viewLegendOption opponentReinforcing "bg-yellow-500" "Opponent Threatens"
+
                 --, li []
                 --    [ div
                 --        [ Attr.class "relative pb-8"
@@ -1392,3 +1342,86 @@ viewLegend (Settings { recentMove }) =
                 ]
             ]
         ]
+
+
+viewLegendOption display displayColor displayText =
+    if display then
+        li []
+            [ div
+                [ Attr.class "relative pb-8"
+                ]
+                [ span
+                    [ Attr.class "absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
+                    , Attr.attribute "aria-hidden" "true"
+                    ]
+                    []
+                , div
+                    [ Attr.class "relative flex space-x-3"
+                    ]
+                    [ div []
+                        [ --span
+                          --    [ Attr.class "h-8 w-8 rounded-full bg-gray-400 flex items-center justify-center ring-8 ring-white"
+                          --    ]
+                          --    [ {- Heroicon name: solid/user -}
+                          --      svg
+                          --        [ SvgAttr.class "h-5 w-5 text-white"
+                          --        , SvgAttr.viewBox "0 0 20 20"
+                          --        , SvgAttr.fill "currentColor"
+                          --        , Attr.attribute "aria-hidden" "true"
+                          --        ]
+                          --        [ path
+                          --            [ SvgAttr.fillRule "evenodd"
+                          --            , SvgAttr.d "M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                          --            , SvgAttr.clipRule "evenodd"
+                          --            ]
+                          --            []
+                          --        ]
+                          --    ]
+                          span
+                            [ Attr.class <| "h-8 w-8 rounded-full " ++ displayColor ++ " flex items-center justify-center ring-8 ring-white"
+                            ]
+                            [ {- Heroicon name: solid/check -}
+                              svg
+                                [ SvgAttr.class "h-5 w-5 text-white"
+                                , SvgAttr.viewBox "0 0 20 20"
+                                , SvgAttr.fill "currentColor"
+                                , Attr.attribute "aria-hidden" "true"
+                                ]
+                                [ path
+                                    [ SvgAttr.fillRule "evenodd"
+                                    , SvgAttr.d "M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                                    , SvgAttr.clipRule "evenodd"
+                                    ]
+                                    []
+
+                                --path
+                                --    [ SvgAttr.fillRule "evenodd"
+                                --    , SvgAttr.d "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                --    , SvgAttr.clipRule "evenodd"
+                                --    ]
+                                --    []
+                                ]
+                            ]
+                        ]
+                    , div
+                        [ Attr.class "min-w-0 flex-1 pt-1.5 flex justify-between space-x-4"
+                        ]
+                        [ div []
+                            [ p
+                                [ Attr.class "text-sm text-gray-500"
+                                ]
+                                [ text displayText
+                                ]
+                            ]
+
+                        --, div
+                        --    [ Attr.class "text-right text-sm whitespace-nowrap text-gray-500"
+                        --    ]
+                        --    [ text "Learn more." ]
+                        ]
+                    ]
+                ]
+            ]
+
+    else
+        span [] []
