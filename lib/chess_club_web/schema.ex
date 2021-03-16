@@ -8,7 +8,7 @@ defmodule ChessClubWeb.Schema do
   object :scenario do
     field :id, non_null(:id)
     field :current_state, non_null(:string)
-    field :recent_move, :string
+    field :moves_played, non_null(list_of(non_null(:move_played)))
     field :available_moves, non_null(list_of(non_null(:move)))
   end
 
@@ -23,6 +23,13 @@ defmodule ChessClubWeb.Schema do
     @desc "The move command that should be sent back to the backend."
     field :move_command, non_null(:string)
     @desc "The fen state if this move were to be made."
+    field :fen_after_move, non_null(:string)
+  end
+
+  object :move_played do
+    @desc "The move command that was played immediately before. Null if first move in game."
+    field :previous_move, non_null(:string)
+    @desc "The fen state after this move was made."
     field :fen_after_move, non_null(:string)
   end
 

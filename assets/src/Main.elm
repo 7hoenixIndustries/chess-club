@@ -34,7 +34,12 @@ type alias Model =
     { key : Nav.Key
     , page : Page
     , backend : Backend
+    , settings : Settings
     }
+
+
+type Settings
+    = Settings { navbarOpen : Bool }
 
 
 type Page
@@ -64,9 +69,11 @@ view : Model -> Browser.Document Msg
 view model =
     case model.page of
         NotFound _ ->
-            Skeleton.view model.backend
+            Skeleton.view (Skeleton.Callbacks SetNavbarOpen)
+                model.backend
                 never
                 { title = "Not Found"
+                , navbarOpen = True
                 , header = []
                 , warning = Skeleton.NoProblems
                 , attrs = Problem.styles
@@ -74,7 +81,7 @@ view model =
                 }
 
         Learn learn ->
-            Skeleton.view model.backend LearnMsg (Learn.view learn)
+            Skeleton.view (Skeleton.Callbacks SetNavbarOpen) model.backend LearnMsg (Learn.view learn)
 
 
 
@@ -93,6 +100,7 @@ init { backendEndpoint, authToken } url key =
         { key = key
         , page = NotFound Session.empty
         , backend = Backend.api backendEndpoint authToken
+        , settings = Settings { navbarOpen = True }
         }
 
 
@@ -102,8 +110,9 @@ init { backendEndpoint, authToken } url key =
 
 type Msg
     = LinkClicked Browser.UrlRequest
-    | UrlChanged Url.Url
     | LearnMsg Learn.Msg
+    | SetNavbarOpen Bool
+    | UrlChanged Url.Url
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -123,6 +132,9 @@ update message model =
 
         UrlChanged url ->
             stepUrl url model
+
+        SetNavbarOpen navbarOpen ->
+            ( { model | settings = Settings { navbarOpen = navbarOpen } }, Cmd.none )
 
         LearnMsg msg ->
             case model.page of

@@ -58,19 +58,16 @@ defmodule ChessClubWeb.ScenarioResolver do
   defp enrich_scenario(scenario) do
     move_commands = Enum.map(scenario.moves, & &1.move_command)
 
-    {available_moves, current_state} =
+    %{moves: available_moves, current_state: current_state} =
       Game.available_moves(Game, scenario.starting_state, move_commands)
 
-    recent_move =
-      move_commands
-      |> Enum.take(-1)
-      |> Enum.to_list()
-      |> List.first()
+    %{moves_played: moves_played} =
+      Game.moves_played(Game, scenario.starting_state, move_commands)
 
     %{
       current_state: current_state,
       available_moves: available_moves,
-      recent_move: recent_move,
+      moves_played: moves_played,
       id: scenario.id
     }
   end

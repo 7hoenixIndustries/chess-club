@@ -17,7 +17,7 @@ defmodule ChessClub.MovesTest do
   # lib installed.
   describe "available_moves" do
     test "returns all available_moves", %{chess_server: server} do
-      {moves, _} = Game.available_moves(server, @fen, [])
+      %{moves: moves} = Game.available_moves(server, @fen, [])
 
       expected_moves = [
         %Move{

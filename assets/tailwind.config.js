@@ -1,12 +1,18 @@
 module.exports = {
-  purge: [
-    "../**/*.html.eex",
-    "../**/*.html.leex",
-    "../**/views/**/*.ex",
-    "../**/live/**/*.ex",
-    "./js/**/*.js",
-    './**/*.elm',
-  ],
+  purge: {
+      content: [
+        "../**/*.html.eex",
+        "../**/*.html.leex",
+        "../**/views/**/*.ex",
+        "../**/live/**/*.ex",
+        "./js/**/*.js",
+        './**/*.elm',
+      ],
+      // Dunno if we need this or not.
+      options: {
+        safelist: [/translate-x-*-squares/]
+      }
+  },
   darkMode: 'media', // or 'media' or 'class' or false
   theme: {
     extend: {
@@ -32,7 +38,7 @@ module.exports = {
         'constrained-1/2': '50vw',
         'constrained-1': '100vw'
       }
-    },
+    }
   },
   variants: {
     extend: {},
