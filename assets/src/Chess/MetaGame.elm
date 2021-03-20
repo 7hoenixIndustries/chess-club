@@ -1,7 +1,9 @@
 module Chess.MetaGame exposing
     ( Callbacks
+    , CentralSquares
     , Model
     , Msg
+    , centralSquares
     , init
     , makeGame
     , moveMade
@@ -28,7 +30,7 @@ But this module is about starting to practice the meta game of Chess earlier tha
 import Browser.Dom
 import Browser.Events exposing (onMouseMove)
 import Chess.Logic as Logic exposing (Piece, Team)
-import Chess.Position as Position exposing (Position(..))
+import Chess.Position as Position exposing (Position(..), e5)
 import Dict exposing (Dict)
 import Html exposing (Attribute, Html, a, button, div, fieldset, h1, h3, img, input, label, li, main_, nav, p, span, text, time, ul)
 import Html.Attributes as Attr exposing (checked, class, classList, name, type_)
@@ -466,7 +468,7 @@ mapAnimating animatedGame =
 
 
 
--- GAME LOGIC
+-- METAGAME LOGIC
 
 
 {-| Returns all squares that have pieces on them that are able to reinforce the move that is being considered.
@@ -481,6 +483,73 @@ reinforcingSquares { starting, current } allMovesTo legalMoves =
 
     else
         []
+
+
+{-| centralSquares
+
+Will return a configuration for populating the central squares with useful info.
+
+At the beginning of the Game, this is what is happening. Both sides are vying for control of the center. . .
+
+It's useful to think of it like a hill in the center of the battlefield. If you are able to take the center then you
+will have a nice advantage (as your ranged pieces will be much better off).
+
+-}
+type alias CentralSquares =
+    { e5 : OwnerCount, d5 : OwnerCount, e4 : OwnerCount, d4 : OwnerCount }
+
+
+type alias OwnerCount =
+    { us : Int, them : Int }
+
+
+centralSquares : Dict String (List Move) -> CentralSquares
+centralSquares legalMovesToPosition =
+    CentralSquares
+        (centralSquare legalMovesToPosition Logic.Black Logic.Black Position.e5)
+        (centralSquare legalMovesToPosition Logic.Black Logic.Black Position.d5)
+        (centralSquare legalMovesToPosition Logic.Black Logic.Black Position.e4)
+        (centralSquare legalMovesToPosition Logic.Black Logic.Black Position.d4)
+
+
+centralSquare : Dict String (List Move) -> Team -> Team -> Position -> { us : Int, them : Int }
+centralSquare legalMovesByPosition turn perspective square =
+    let
+        foo =
+            Debug.log "perspective 2" perspective
+
+        bar =
+            Debug.log "turn 2" turn
+    in
+    case Dict.get (Position.toAlgebraic square) legalMovesByPosition of
+        Nothing ->
+            { us = 0, them = 0 }
+
+        Just moves ->
+            List.partition (\m -> m.color == turnToColor perspective) moves
+                |> Tuple.mapBoth List.length List.length
+                --|> (\( a, b ) ->
+                --        if perspective == turn then
+                --            let
+                --                foo =
+                --                    Debug.log "perspective " perspective
+                --
+                --                bar =
+                --                    Debug.log "turn " turn
+                --            in
+                --            { us = a, them = b }
+                --
+                --        else
+                --            let
+                --                foo =
+                --                    Debug.log "perspective 2" perspective
+                --
+                --                bar =
+                --                    Debug.log "turn 2" turn
+                --            in
+                --            { us = b, them = a }
+                --   )
+                |> (\( a, b ) -> { us = a, them = b })
 
 
 
@@ -880,19 +949,25 @@ viewSquare { game, historical, reinforcing, opponentReinforcing, playerColor } b
                     , on "mousedown" (D.map4 StartDragging pageX pageY (D.succeed position) (D.succeed piece))
                     ]
             in
-            basicSquare position historical additionalSquareClasses additionalSquareAttrs [ findSvg piece [] ]
+            basicSquare game playerColor position historical additionalSquareClasses additionalSquareAttrs [ findSvg piece [] ]
 
         ( False, Just piece ) ->
-            basicSquare position historical [] [] [ findSvg piece [] ]
+            basicSquare game playerColor position historical [] [] [ findSvg piece [] ]
 
         ( _, Nothing ) ->
-            basicSquare position historical [] [] []
+            basicSquare game playerColor position historical [] [] []
 
 
-basicSquare position historical additionalSquareClasses additionalSquareAttrs additionalSquareChildren =
+basicSquare game playerColor position historical additionalSquareClasses additionalSquareAttrs additionalSquareChildren =
+    let
+        ownership =
+            ownedBy position game playerColor
+    in
     div
         ([ classList
             ([ ( "w-full h-full m-0", True )
+             , ( "bg-green-400 bg-opacity-100", ownership |> (\ee -> ee.us - ee.them > 0) )
+             , ( "bg-yellow-400 bg-opacity-100", ownership |> (\ee -> ee.them - ee.us > 0) )
              , ( "bg-gray-400 bg-opacity-70", isRecentMove position historical )
              , ( "transition", True )
              ]
@@ -902,6 +977,23 @@ basicSquare position historical additionalSquareClasses additionalSquareAttrs ad
             ++ additionalSquareAttrs
         )
         additionalSquareChildren
+
+
+ownedBy position game playerColor =
+    if position == Position.e5 then
+        centralSquare game.movesByPosition game.turn playerColor Position.e5
+
+    else if position == Position.e4 then
+        centralSquare game.movesByPosition game.turn playerColor Position.e4
+
+    else if position == Position.d5 then
+        centralSquare game.movesByPosition game.turn playerColor Position.d5
+
+    else if position == Position.d4 then
+        centralSquare game.movesByPosition game.turn playerColor Position.d4
+
+    else
+        { us = 0, them = 0 }
 
 
 isRecentMove : Position -> Historical -> Bool

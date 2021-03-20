@@ -4,6 +4,7 @@ module Chess.Logic exposing
     , MoveKey
     , Piece(..)
     , PieceType(..)
+    , PositionKey
     , Square(..)
     , Team(..)
     , addPiece
@@ -17,6 +18,7 @@ module Chess.Logic exposing
     , init
     , isCheckmate
     , makeMove
+    , movesDict
     , nextTurn
     , popPiece
     , removePiece
