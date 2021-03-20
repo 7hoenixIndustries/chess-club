@@ -449,3 +449,52 @@ resource "aws_route53_record" "chess_club" {
     evaluate_target_health = true
   }
 }
+
+# -----------------------------------------------------------------------------
+# Create SES domain identity and DomainKeys Identified Mail (DKIM)
+# -----------------------------------------------------------------------------
+
+
+resource "aws_ses_domain_identity" "chess_club_ses_domain" {
+  domain = var.domain
+}
+
+resource "aws_route53_record" "chess_club_amazonses_verification_record" {
+  zone_id = data.aws_route53_zone.chess_club.zone_id
+  name    = "_amazonses.${var.domain}"
+  type    = "TXT"
+  ttl     = "600"
+  records = [aws_ses_domain_identity.chess_club_ses_domain.verification_token]
+}
+
+resource "aws_ses_domain_dkim" "chess_club_ses_domain_dkim" {
+  domain = aws_ses_domain_identity.chess_club_ses_domain.domain
+}
+
+resource "aws_route53_record" "chess_club_amazonses_dkim_record" {
+  count   = 3
+  zone_id = data.aws_route53_zone.chess_club.zone_id
+  name    = "${element(aws_ses_domain_dkim.chess_club_ses_domain_dkim.dkim_tokens, count.index)}._domainkey"
+  type    = "CNAME"
+  ttl     = "600"
+  records = ["${element(aws_ses_domain_dkim.chess_club_ses_domain_dkim.dkim_tokens, count.index)}.dkim.amazonses.com"]
+}
+
+data "aws_iam_policy_document" "chess_club_iam_ses_policy_document" {
+  statement {
+    actions   = ["SES:SendEmail", "SES:SendRawEmail"]
+    resources = [aws_ses_domain_identity.chess_club_ses_domain.arn]
+
+    principals {
+      identifiers = ["*"]
+      type        = "AWS"
+    }
+  }
+}
+
+resource "aws_ses_identity_policy" "chess_club_identity_policy" {
+  identity = aws_ses_domain_identity.chess_club_ses_domain.arn
+  name     = "chess_club_ses_identity_policy"
+  policy   = data.aws_iam_policy_document.chess_club_iam_ses_policy_document.json
+}
+
