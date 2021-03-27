@@ -184,6 +184,22 @@ resource "aws_security_group" "chess_club_instance" {
   }
 }
 
+// EC2 -> SES Endpoint
+resource "aws_security_group" "ses_endpoint" {
+  name          = "allow-chess-club-to-send-email"
+  description   = "Allow chess-club to send email to SES."
+  vpc_id        = aws_vpc.chess_club.id
+
+  ingress {
+    from_port   = 25
+    to_port     = 25
+    protocol    = "tcp"
+    cidr_blocks = aws_subnet.chess_club_public.*.cidr_block
+  }
+}
+
+// Instance
+
 resource "aws_key_pair" "chess_club" {
   key_name   = "chess_club_deploy"
   public_key = file("../chess_club_key.pub")
@@ -341,7 +357,7 @@ data "aws_elb_service_account" "main" {
 
 data "aws_iam_policy_document" "chess_club" {
   statement {
-    actions   = ["s3:PutObject"]
+    actions   = [ "s3:PutObject" ]
     resources = ["${aws_s3_bucket.chess_club.arn}/alb/*"]
 
     principals {
@@ -498,3 +514,13 @@ resource "aws_ses_identity_policy" "chess_club_identity_policy" {
   policy   = data.aws_iam_policy_document.chess_club_iam_ses_policy_document.json
 }
 
+# -----------------------------------------------------------------------------
+# VPC endpoints
+# -----------------------------------------------------------------------------
+
+resource "aws_vpc_endpoint" "ses" {
+  vpc_id       = aws_vpc.chess_club.id
+  service_name = "com.amazonaws.${var.region}.email-smtp"
+  vpc_endpoint_type = "Interface"
+  security_group_ids = [aws_security_group.ses_endpoint.id]
+}

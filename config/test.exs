@@ -13,6 +13,8 @@ config :chess_club, ChessClub.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
   ssl: false
 
+config :chess_club, ChessClub.Mailer, adapter: Bamboo.TestAdapter
+
 # Run server in CI
 config :chess_club, ChessClubWeb.Endpoint,
   http: [port: 4000],
