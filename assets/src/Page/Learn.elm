@@ -60,7 +60,7 @@ init backend session =
         Nothing ->
             let
                 runSpecific =
-                    --Debug.log "Ensuring not possible to release" (Just "17")
+                    --Debug.log "Ensuring not possible to release" (Just "20")
                     Nothing
             in
             ( Model Nothing session Loading NotConnected Nothing
@@ -134,7 +134,7 @@ update backend msg model =
                 Ok scenario ->
                     let
                         ( chessModel, chessMsg ) =
-                            Chess.init scenario.availableMoves scenario.currentState scenario.previousMoves ChessMsg
+                            Chess.init scenario.availableMoves scenario.startingState scenario.previousMoves ChessMsg
                     in
                     -- TODO: chessModel is directly dependent on scenario. . . are we able to combine these somehow?
                     ( { model

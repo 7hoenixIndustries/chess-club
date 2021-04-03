@@ -7,6 +7,7 @@ defmodule ChessClubWeb.Schema do
 
   object :scenario do
     field :id, non_null(:id)
+    field :starting_state, non_null(:string)
     field :current_state, non_null(:string)
     field :moves_played, non_null(list_of(non_null(:move_played)))
     field :available_moves, non_null(list_of(non_null(:move)))

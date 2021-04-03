@@ -65,6 +65,7 @@ defmodule ChessClubWeb.ScenarioResolver do
       Game.moves_played(Game, scenario.starting_state, move_commands)
 
     %{
+      starting_state: scenario.starting_state,
       current_state: current_state,
       available_moves: available_moves,
       moves_played: moves_played,
