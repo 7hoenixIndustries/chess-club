@@ -137,7 +137,7 @@ type DragState
 
 
 init : List Move -> Fen -> PreviousMovesSafe -> (Msg -> msg) -> ( Model, Cmd msg )
-init availableMoves currentState (PreviousMovesSafe pm) mapMsg =
+init availableMoves startingState (PreviousMovesSafe pm) mapMsg =
     let
         previousMoves =
             List.reverse pm
@@ -146,16 +146,16 @@ init availableMoves currentState (PreviousMovesSafe pm) mapMsg =
             case previousMoves of
                 [] ->
                     -- Opening Move
-                    ( DoneAnimating <| makeGame availableMoves currentState, Nothing )
+                    ( DoneAnimating <| makeGame availableMoves startingState, Nothing )
 
                 ( basicMove, fenAfterMove ) :: [] ->
-                    case makeGameForAnimating availableMoves currentState basicMove of
+                    case makeGameForAnimating availableMoves startingState basicMove of
                         Ok ( g, bMWP ) ->
                             ( Animating { before = g, after = makeGame availableMoves fenAfterMove }
                             , Just bMWP
                             )
 
-                        Err _ ->
+                        Err e ->
                             ( DoneAnimating Logic.blankBoard, Nothing )
 
                 ( basicMove, fenAfterMove ) :: ( _, currentFen ) :: _ ->
@@ -168,7 +168,7 @@ init availableMoves currentState (PreviousMovesSafe pm) mapMsg =
                         Err _ ->
                             ( DoneAnimating Logic.blankBoard, Nothing )
     in
-    ( Model game (Historical previousMoves) Logic.Black [] [] NoPieceInHand basicMoveWithPieces Nothing Nothing False currentState
+    ( Model game (Historical previousMoves) Logic.Black [] [] NoPieceInHand basicMoveWithPieces Nothing Nothing False startingState
     , Cmd.batch
         [ Task.attempt (mapMsg << StoreCopyOfBrowserBoard) (Browser.Dom.getElement "main-board")
         ]

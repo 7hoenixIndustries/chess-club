@@ -111,6 +111,15 @@ terraform apply
 MIX_ENV=prod mix ansible.playbook setup
 ```
 
+### Delete a move in prod
+
+Get into iex.
+
+```bash
+q = from m in ChessClub.Learn.Move, where: m.scenario_id == ^some_bad_scenario_id
+q |> ChessClub.Repo.delete_all
+```
+
 ---------------------------------------------------------------------------------------
 
 ## Troubleshooting Issues

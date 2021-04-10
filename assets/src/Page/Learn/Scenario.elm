@@ -20,7 +20,7 @@ import Api.Mutation as Mutation
 import Api.Object
 import Api.Object.Move
 import Api.Object.MovePlayed
-import Api.Object.Scenario exposing (availableMoves, currentState, id, movesPlayed)
+import Api.Object.Scenario exposing (availableMoves, currentState, id, movesPlayed, startingState)
 import Api.Query exposing (scenario, scenarios)
 import Api.Scalar exposing (Id(..))
 import Api.Subscription as Subscription
@@ -45,7 +45,8 @@ type Scenario2
 
 
 type alias Scenario =
-    { availableMoves : List Move
+    { startingState : Fen
+    , availableMoves : List Move
     , currentState : Fen
     , previousMoves : PreviousMovesSafe
     , id : Id
@@ -77,7 +78,8 @@ scenarioQuery id =
 
 scenarioSelection : SelectionSet Scenario Api.Object.Scenario
 scenarioSelection =
-    SelectionSet.map4 Scenario
+    SelectionSet.map5 Scenario
+        (SelectionSet.map Fen startingState)
         (availableMoves moveSelection)
         (SelectionSet.map Fen currentState)
         movesPlayedSelection
