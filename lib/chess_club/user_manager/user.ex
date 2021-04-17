@@ -6,7 +6,7 @@ defmodule ChessClub.UserManager.User do
 
   @required_attributes [:username, :password, :password_confirmation]
 
-  schema "users" do
+  schema "users_old" do
     field :password, :string, virtual: true
     field :password_hashed, :string
     field :username, :string

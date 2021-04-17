@@ -71,7 +71,8 @@ defmodule ChessClub.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ex_machina, "~> 2.4", only: [:dev, :test]},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
-      {:phoenix_live_reload, "~> 1.2", only: :dev}
+      {:phoenix_live_reload, "~> 1.2", only: :dev},
+      {:phx_gen_auth, "~> 0.7", only: :dev}
     ]
   end
 
