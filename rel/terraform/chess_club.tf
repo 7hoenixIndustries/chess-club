@@ -514,6 +514,11 @@ resource "aws_ses_identity_policy" "chess_club_identity_policy" {
   policy   = data.aws_iam_policy_document.chess_club_iam_ses_policy_document.json
 }
 
+resource "aws_ses_domain_identity_verification" "chess_club_verification" {
+  domain = aws_ses_domain_identity.chess_club_ses_domain.id
+  depends_on = [aws_route53_record.chess_club_amazonses_verification_record]
+}
+
 # -----------------------------------------------------------------------------
 # VPC endpoints
 # -----------------------------------------------------------------------------
