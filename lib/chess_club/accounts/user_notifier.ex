@@ -5,10 +5,23 @@ defmodule ChessClub.Accounts.UserNotifier do
   #   * Swoosh - https://hexdocs.pm/swoosh
   #   * Bamboo - https://hexdocs.pm/bamboo
   #
+  import Bamboo.Email
+  alias ChessClub.Mailer
+
   defp deliver(to, body) do
+    email =
+      new_email(
+        # to: "#{to_email}+#{random_number}@#{to_domain}.com",
+        to: "#{to}",
+        from: "alerts@7hoenix.com",
+        subject: "Welcome to the club",
+        html_body: body,
+        text_body: body
+      )
+
     require Logger
-    Logger.debug(body)
-    {:ok, %{to: to, body: body}}
+    Logger.debug(email)
+    Mailer.deliver_now(email)
   end
 
   @doc """

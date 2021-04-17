@@ -43,9 +43,9 @@ defmodule ChessClubWeb.Router do
   #   post "/login", SessionController, :login
   #   get "/logout", SessionController, :logout
   # end
-  scope "/", ChessClubWeb do
-    get "/", UserRegistrationController, :new
-  end
+  # scope "/", ChessClubWeb do
+  #   get "/", UserRegistrationController, :new
+  # end
 
   ## Authentication routes
 
