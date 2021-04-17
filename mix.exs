@@ -41,11 +41,10 @@ defmodule ChessClub.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:argon2_elixir, "~> 2.0"},
       {:absinthe, "~> 1.5.0"},
       {:absinthe_phoenix, "~> 2.0.0"},
       {:absinthe_plug, "~> 1.5.0"},
-      {:argon2_elixir, "~> 2.4.0"},
+      {:argon2_elixir, "~> 2.0"},
       {:bamboo, "~> 2.0.1"},
       {:bamboo_ses, "~> 0.2.0"},
       {:ecto_sql, "~> 3.4"},

@@ -9,13 +9,14 @@ defmodule ChessClubWeb.SessionController do
     changeset = UserManager.change_user(%User{})
     maybe_user = Guardian.Plug.current_resource(conn)
 
-    if maybe_user do
-      redirect(conn, to: "/app")
-    else
-      conn
-      |> put_layout("index.html")
-      |> render("new.html", %{changeset: changeset, action: Routes.session_path(conn, :login)})
-    end
+    # if maybe_user do
+    #   redirect(conn, to: "/app")
+    # else
+    conn
+    |> put_layout("index.html")
+    |> render("new.html", %{changeset: changeset, action: Routes.session_path(conn, :login)})
+
+    # end
   end
 
   def login(conn, %{"user" => %{"username" => username, "password" => password}}) do
@@ -31,10 +32,13 @@ defmodule ChessClubWeb.SessionController do
   end
 
   defp login_reply({:ok, user}, conn) do
+    # conn
+    # |> put_flash(:info, "Welcome back!")
+    # |> Guardian.Plug.sign_in(user)
+    # |> redirect(to: "/app")
     conn
-    |> put_flash(:info, "Welcome back!")
-    |> Guardian.Plug.sign_in(user)
-    |> redirect(to: "/app")
+    |> Guardian.Plug.sign_out()
+    |> redirect(to: "/login")
   end
 
   defp login_reply({:error, reason}, conn) do

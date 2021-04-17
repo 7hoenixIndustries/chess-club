@@ -10,12 +10,12 @@ defmodule ChessClubWeb.PageController do
     |> render("index.html")
   end
 
-  def app(conn, _) do
-    user = Plug.current_resource(conn)
-    {:ok, token, _claims} = Guardian.encode_and_sign(user)
+  # def app(conn, _) do
+  #   user = Plug.current_resource(conn)
+  #   {:ok, token, _claims} = Guardian.encode_and_sign(user)
 
-    conn
-    |> put_layout("app.html")
-    |> render("app.html", current_user: user, auth_token: token)
-  end
+  #   conn
+  #   |> put_layout("app.html")
+  #   |> render("app.html", current_user: user, auth_token: token)
+  # end
 end
