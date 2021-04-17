@@ -49,6 +49,7 @@ defmodule ChessClub.MixProject do
       {:bamboo_ses, "~> 0.2.0"},
       {:ecto_sql, "~> 3.4"},
       {:erlport, "~> 0.10.1"},
+      {:ex_aws, "~> 2.2.1"},
       {:gettext, "~> 0.11"},
       {:guardian, "~> 2.1.1"},
       {:jason, "~> 1.0"},
