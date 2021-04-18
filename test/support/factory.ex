@@ -4,7 +4,7 @@ defmodule ChessClub.Factory do
 
   alias ChessClub.Learn.Move
   alias ChessClub.Learn.Scenario
-  alias ChessClub.UserManager.User
+  # alias ChessClub.UserManager.User
 
   @blank_board "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -21,10 +21,10 @@ defmodule ChessClub.Factory do
     }
   end
 
-  def user_factory do
-    %User{
-      username: "joyce",
-      password_hashed: "some_hashed_password"
-    }
-  end
+  # def user_factory do
+  #   %User{
+  #     username: "joyce",
+  #     password_hashed: "some_hashed_password"
+  #   }
+  # end
 end

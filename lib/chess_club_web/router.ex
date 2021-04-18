@@ -14,38 +14,8 @@ defmodule ChessClubWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug :fetch_api_current_user
   end
-
-  # NOTE: This :auth pipeline is for authenticating and does NOT mean that the underlying resource is authenticated.
-  # For routes that are authenticated use the :ensure_auth pipeline instead.
-  # pipeline :auth do
-  #   plug ChessClub.UserManager.Pipeline
-  # end
-
-  # pipeline :ensure_auth do
-  #   plug Guardian.Plug.EnsureAuthenticated
-  # end
-
-  # pipeline :graphql do
-  #   plug ChessClub.UserManager.Context
-  # end
-
-  # # LOGIN and LOGOUT
-  # scope "/", ChessClubWeb do
-  #   pipe_through [:browser, :auth]
-
-  #   get "/", PageController, :index
-
-  #   get "/account", UserController, :new
-  #   post "/account", UserController, :create
-
-  #   get "/login", SessionController, :new
-  #   post "/login", SessionController, :login
-  #   get "/logout", SessionController, :logout
-  # end
-  # scope "/", ChessClubWeb do
-  #   get "/", UserRegistrationController, :new
-  # end
 
   ## Authentication routes
 
@@ -69,50 +39,31 @@ defmodule ChessClubWeb.Router do
     put "/users/settings", UserSettingsController, :update
     get "/users/settings/confirm_email/:token", UserSettingsController, :confirm_email
 
-    # get "/app", PageController, :app
+    get "/app", PageController, :app
   end
 
   scope "/", ChessClubWeb do
     pipe_through [:browser]
 
+    get "/", PageController, :index
+    get "/users/log_out", UserSessionController, :delete
     delete "/users/log_out", UserSessionController, :delete
     get "/users/confirm", UserConfirmationController, :new
     post "/users/confirm", UserConfirmationController, :create
     get "/users/confirm/:token", UserConfirmationController, :confirm
   end
 
-  # TODO: BRING BACK
-  # Added for use while troubleshooting
-  # scope "/version", ChessClubWeb do
-  #   get "/", VersionController, :index
-  # end
-  # / BRING BACK
+  scope "/api" do
+    pipe_through [:api]
 
-  # scope "/", ChessClubWeb do
-  #   pipe_through [:browser, :auth, :ensure_auth]
+    forward "/graphical", Absinthe.Plug.GraphiQL,
+      schema: ChessClubWeb.Schema,
+      interface: :playground,
+      context: %{pubsub: ChessClubWeb.Endpoint}
 
-  #   get "/app", PageController, :app
-  # end
+    forward "/graphql", Absinthe.Plug, schema: ChessClubWeb.Schema
+  end
 
-  # TODO: BRING BACK
-  # scope "/api" do
-  #   pipe_through [:api, :graphql]
-
-  #   forward "/graphical", Absinthe.Plug.GraphiQL,
-  #     schema: ChessClubWeb.Schema,
-  #     interface: :playground,
-  #     context: %{pubsub: ChessClubWeb.Endpoint}
-
-  #   forward "/graphql", Absinthe.Plug, schema: ChessClubWeb.Schema
-  # end
-  # / BRING BACK
-
-  # Other scopes may use custom stacks.
-  # scope "/api", ChessClubWeb do
-  #   pipe_through :api
-  # end
-
-  # TODO: BRING BACK
   # Enables LiveDashboard only for development
   #
   # If you want to use the LiveDashboard in production, you should put
@@ -120,13 +71,17 @@ defmodule ChessClubWeb.Router do
   # If your application does not have an admins-only section yet,
   # you can use Plug.BasicAuth to set up some basic authentication
   # as long as you are also using SSL (which you should anyway).
-  # if Mix.env() in [:dev, :test] do
-  #   import Phoenix.LiveDashboard.Router
+  if Mix.env() in [:dev, :test] do
+    import Phoenix.LiveDashboard.Router
 
-  #   scope "/" do
-  #     pipe_through :browser
-  #     live_dashboard "/dashboard", metrics: ChessClubWeb.Telemetry
-  #   end
-  # end
-  # / BRING BACK
+    scope "/" do
+      pipe_through :browser
+      live_dashboard "/dashboard", metrics: ChessClubWeb.Telemetry
+    end
+  end
+
+  # Added for use while troubleshooting
+  scope "/version", ChessClubWeb do
+    get "/", VersionController, :index
+  end
 end

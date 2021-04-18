@@ -10,11 +10,11 @@ defmodule ChessClubWeb.UserSettingsController do
     render(conn, "edit.html")
   end
 
-  def update(conn, %{"action" => "update_email"} = params) do
-    %{"current_password" => password, "user" => user_params} = params
+  def update(conn, %{"action" => "update_email", "user" => user_params}) do
+    %{"current_password" => current_password} = user_params
     user = conn.assigns.current_user
 
-    case Accounts.apply_user_email(user, password, user_params) do
+    case Accounts.apply_user_email(user, current_password, user_params) do
       {:ok, applied_user} ->
         Accounts.deliver_update_email_instructions(
           applied_user,
@@ -34,8 +34,8 @@ defmodule ChessClubWeb.UserSettingsController do
     end
   end
 
-  def update(conn, %{"action" => "update_password"} = params) do
-    %{"current_password" => password, "user" => user_params} = params
+  def update(conn, %{"action" => "update_password", "user" => user_params}) do
+    %{"current_password" => password} = user_params
     user = conn.assigns.current_user
 
     case Accounts.update_user_password(user, password, user_params) do

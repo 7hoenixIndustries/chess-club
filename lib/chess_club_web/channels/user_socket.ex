@@ -1,7 +1,9 @@
 defmodule ChessClubWeb.UserSocket do
+  import Logger
   use Phoenix.Socket
   use Absinthe.Phoenix.Socket, schema: ChessClubWeb.Schema
-  alias ChessClub.UserManager.Guardian
+
+  alias ChessClub.Accounts
 
   ## Channels
   # channel "room:*", ChessClubWeb.RoomChannel
@@ -18,17 +20,22 @@ defmodule ChessClubWeb.UserSocket do
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
   @impl Phoenix.Socket
-  def connect(%{"auth_token" => auth_token}, socket, _connect_info) do
-    {:ok, current_user} = authorize(auth_token)
+  def connect(%{"auth_token" => encoded_token}, socket, _connect_info) do
+    with {:ok, user_token} <- Base.decode64(encoded_token),
+         %ChessClub.Accounts.User{} = user <- Accounts.get_user_by_session_token(user_token) do
+      authenticated_socket =
+        Absinthe.Phoenix.Socket.put_options(socket,
+          context: %{
+            current_user: user
+          }
+        )
 
-    socket =
-      Absinthe.Phoenix.Socket.put_options(socket,
-        context: %{
-          current_user: current_user
-        }
-      )
-
-    {:ok, socket}
+      {:ok, authenticated_socket}
+    else
+      result ->
+        Logger.info("Not authenticaed in socket connection: #{result}.")
+        {:ok, socket}
+    end
   end
 
   def connect(_params, _socket, _connect_info) do
@@ -47,9 +54,4 @@ defmodule ChessClubWeb.UserSocket do
   # Returning `nil` makes this socket anonymous.
   @impl Phoenix.Socket
   def id(_socket), do: nil
-
-  # REFACTOR: duplicated from lib/chess_club/user_manager/context.ex
-  defp authorize(token) do
-    Guardian.decode_and_verify(token, %{"typ" => "access"})
-  end
 end

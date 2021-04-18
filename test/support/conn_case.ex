@@ -18,8 +18,8 @@ defmodule ChessClubWeb.ConnCase do
   use ExUnit.CaseTemplate
 
   alias ChessClub.Factory
-  alias ChessClub.UserManager.Guardian
   alias Ecto.Adapters.SQL.Sandbox
+  alias ChessClub.AccountsFixtures
 
   using do
     quote do
@@ -44,17 +44,7 @@ defmodule ChessClubWeb.ConnCase do
       Sandbox.mode(ChessClub.Repo, {:shared, self()})
     end
 
-    user = Factory.insert(:user)
-    {:ok, auth_token, _claims} = Guardian.encode_and_sign(user)
-
-    authorized_conn =
-      Plug.Conn.put_req_header(
-        Phoenix.ConnTest.build_conn(),
-        "authorization",
-        "Bearer #{auth_token}"
-      )
-
-    {:ok, conn: Phoenix.ConnTest.build_conn(), authorized_conn: authorized_conn}
+    {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 
   @doc """
@@ -81,5 +71,19 @@ defmodule ChessClubWeb.ConnCase do
     conn
     |> Phoenix.ConnTest.init_test_session(%{})
     |> Plug.Conn.put_session(:user_token, token)
+  end
+
+  def register_and_authenticate_user_for_api(%{conn: conn}) do
+    user = AccountsFixtures.user_fixture()
+    token = ChessClub.Accounts.generate_user_session_token(user)
+
+    authorized_conn =
+      Plug.Conn.put_req_header(
+        Phoenix.ConnTest.build_conn(),
+        "authorization",
+        "Bearer #{Base.encode64(token)}"
+      )
+
+    %{conn: conn, user: user, authorized_conn: authorized_conn}
   end
 end

@@ -1,6 +1,7 @@
 defmodule ChessClubWeb.UserAuth do
-  import Plug.Conn
+  require Logger
   import Phoenix.Controller
+  import Plug.Conn
 
   alias ChessClub.Accounts
   alias ChessClubWeb.Router.Helpers, as: Routes
@@ -85,6 +86,22 @@ defmodule ChessClubWeb.UserAuth do
   end
 
   @doc """
+  Authenticates the user by looking into the authorization
+  header.
+  """
+  def fetch_api_current_user(conn, _opts) do
+    with ["Bearer " <> encoded_token] <- get_req_header(conn, "authorization"),
+         {:ok, user_token} <- Base.decode64(encoded_token),
+         %ChessClub.Accounts.User{} = user <- Accounts.get_user_by_session_token(user_token) do
+      Absinthe.Plug.put_options(conn, context: %{current_user: user})
+    else
+      result ->
+        Logger.info("Not authenticaed in api connection: #{result}.")
+        conn
+    end
+  end
+
+  @doc """
   Authenticates the user by looking into the session
   and remember me token.
   """
@@ -124,18 +141,27 @@ defmodule ChessClubWeb.UserAuth do
   @doc """
   Used for routes that require the user to be authenticated.
 
-  If you want to enforce the user email is confirmed before
-  they use the application at all, here would be a good place.
+  We first check and ensure that the user email is confirmed before
+  they are allowed to use the application at all.
   """
   def require_authenticated_user(conn, _opts) do
-    if conn.assigns[:current_user] do
-      conn
-    else
-      conn
-      |> put_flash(:error, "You must log in to access this page.")
-      |> maybe_store_return_to()
-      |> redirect(to: Routes.user_session_path(conn, :new))
-      |> halt()
+    cond do
+      conn.assigns[:current_user] && conn.assigns[:current_user].confirmed_at ->
+        conn
+
+      conn.assigns[:current_user] ->
+        conn
+        |> put_flash(:info, "You must confirm your email to continue.")
+        |> maybe_store_return_to()
+        |> redirect(to: Routes.page_path(conn, :index))
+        |> halt()
+
+      true ->
+        conn
+        |> put_flash(:error, "You must log in to access this page.")
+        |> maybe_store_return_to()
+        |> redirect(to: Routes.user_session_path(conn, :new))
+        |> halt()
     end
   end
 
@@ -145,5 +171,5 @@ defmodule ChessClubWeb.UserAuth do
 
   defp maybe_store_return_to(conn), do: conn
 
-  defp signed_in_path(_conn), do: "/"
+  defp signed_in_path(_conn), do: "/app"
 end

@@ -41,13 +41,25 @@
           </div>
         </div>
         <div class="hidden md:flex md:space-x-10">
-          <a href="login" class="font-medium text-gray-500 hover:text-gray-900">Product</a>
+          <a href="<%= Routes.page_path(@conn, :app) %>" class="font-medium text-gray-500 hover:text-gray-900">Product</a>
         </div>
         <div class="hidden md:absolute md:flex md:items-center md:justify-end md:inset-y-0 md:right-0">
           <span class="inline-flex rounded-md shadow">
-            <a href="login" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50">
-              Log in
-            </a>
+            <%= Phoenix.View.render(ChessClubWeb.LayoutView, "_user_menu.html", conn: @conn, current_user: @maybe_current_user) %>
+
+            <%# <%= if is_nil(@maybe_current_user) do %1> %>
+            <%#   <a href="<%= Routes.user_session_path(@conn, :new) %1>" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50"> %>
+            <%#     Log in %>
+            <%#   </a> %>
+            <%# <% else %1> %>
+            <%#   <1%# <%= @maybe_current_user.email %2> %1> %>
+
+            <%#   <%= link "Settings", to: Routes.user_settings_path(@conn, :edit), class: "inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50" %1> %>
+            <%#   <%= link "Log out", to: Routes.user_session_path(@conn, :delete), method: :delete, class: "inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50" %1> %>
+            <%#   <1%# <a href="<%= Routes.user_session_path(@conn, :delete) %2>" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50"> %1> %>
+            <%#   <1%#   Log out %1> %>
+            <%#   <1%# </a> %1> %>
+            <%# <% end %1> %>
           </span>
         </div>
       </nav>
@@ -90,9 +102,44 @@
             <a href="#" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50" role="menuitem">Company</a>
           </div>
           <div role="none">
-            <a href="#" class="block w-full px-5 py-3 text-center font-medium text-indigo-600 bg-gray-50 hover:bg-gray-100" role="menuitem">
-              Log in
-            </a>
+
+            <%= Phoenix.View.render(ChessClubWeb.LayoutView, "_user_menu.html", conn: @conn, current_user: @maybe_current_user) %>
+            <%# <%= if is_nil(@maybe_current_user) do %1> %>
+            <%#   <a href="<%= Routes.user_session_path(@conn, :new) %1>" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50"> %>
+            <%#     Log in %>
+            <%#   </a> %>
+            <%# <% else %1> %>
+            <%#   <1%# TODO: fix this someday %1> %>
+            <%#   <1%# <%= @maybe_current_user.email %2> %1> %>
+            <%#   <1%# <%= link "Log out", to: Routes.user_session_path(@conn, :delete), method: :delete %2> %1> %>
+            <%#   <1%# <a href="<%= Routes.user_session_path(@conn, :delete) %2>" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50"> %1> %>
+            <%#   <1%#   Log out</a> %1> %>
+            <%#   <%= link "Settings", to: Routes.user_settings_path(@conn, :edit), class: "inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50" %1> %>
+            <%#   <%= link "Log out", to: Routes.user_session_path(@conn, :delete), method: :delete, class: "inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50" %1> %>
+            <%# <% end %1> %>
+            <%# foo %>
+            <%# <% if @maybe_current_user do %1> %>
+            <%#   <%= @maybe_current_user.email %1> %>
+            <%#   <a href="<%= Routes.user_session_path(@conn, :new) %1>" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50"> %>
+            <%#     Log out %>
+            <%#   </a> %>
+            <%# <% else %1> %>
+            <%#   <a href="<%= Routes.user_session_path(@conn, :new) %1>" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50"> %>
+            <%#     Log in %>
+            <%#   </a> %>
+            <%# <% end %1> %>
+            <%# <a href="#" class="block w-full px-5 py-3 text-center font-medium text-indigo-600 bg-gray-50 hover:bg-gray-100" role="menuitem"> %>
+            <%#   <% if @maybe_current_user do %1> %>
+            <%#     <%= @maybe_current_user.email %1> %>
+            <%#     <a href="<%= Routes.user_session_path(@conn, :new) %1>" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50"> %>
+            <%#       Log out %>
+            <%#     </a> %>
+            <%#   <% else %1> %>
+            <%#     <a href="<%= Routes.user_session_path(@conn, :new) %1>" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50"> %>
+            <%#       Log in %>
+            <%#     </a> %>
+            <%#   <% end %1> %>
+            <%# </a> %>
           </div>
         </div>
       </div>
@@ -100,6 +147,7 @@
 
     <main class="mt-16 mx-auto max-w-7xl px-4 sm:mt-24">
       <div class="text-center">
+
         <h1 class="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
           <span class="block xl:inline">A Learning Platform</span>
           <span class="block text-indigo-600 xl:inline">optimized for learners</span>
@@ -109,16 +157,38 @@
         </p>
         <div class="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
           <div class="rounded-md shadow">
-            <a href="account" class="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 md:py-4 md:text-lg md:px-10">
-              Get started (in alpha)
-            </a>
+            <%= link "Get started (in alpha)", to: Routes.page_path(@conn, :app), class: "w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 md:py-4 md:text-lg md:px-10" %>
           </div>
+
           <%# <div class="mt-3 rounded-md shadow sm:mt-0 sm:ml-3"> %>
           <%#   <a href="#" class="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10"> %>
           <%#     Live demo %>
           <%#   </a> %>
           <%# </div> %>
         </div>
+          <%= if is_nil(get_flash(@conn, :info)) do %>
+          <% else %>
+            <div class="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
+              <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <div class="flex">
+                  <div class="flex-shrink-0">
+                    <!-- Heroicon name: solid/exclamation -->
+                    <svg class="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="ml-3">
+                    <p class="text-sm text-yellow-700">
+                      <%= get_flash(@conn, :info) %>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        <!-- This example requires Tailwind CSS v2.0+ -->
+        <%# <p class="alert alert-info" role="alert"><%= get_flash(@conn, :info) %1></p> %>
+        <%# <p class="alert alert-danger" role="alert"><%= get_flash(@conn, :error) %1></p> %>
       </div>
     </main>
   </div>

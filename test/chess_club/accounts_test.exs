@@ -194,7 +194,7 @@ defmodule ChessClub.AccountsTest do
 
   describe "update_user_email/2" do
     setup do
-      user = user_fixture()
+      user = registered_but_not_confirmed_user_fixture()
       email = unique_user_email()
 
       token =
@@ -363,7 +363,7 @@ defmodule ChessClub.AccountsTest do
 
   describe "deliver_user_confirmation_instructions/2" do
     setup do
-      %{user: user_fixture()}
+      %{user: registered_but_not_confirmed_user_fixture()}
     end
 
     test "sends token through notification", %{user: user} do
@@ -382,7 +382,7 @@ defmodule ChessClub.AccountsTest do
 
   describe "confirm_user/1" do
     setup do
-      user = user_fixture()
+      user = registered_but_not_confirmed_user_fixture()
 
       token =
         extract_user_token(fn url ->

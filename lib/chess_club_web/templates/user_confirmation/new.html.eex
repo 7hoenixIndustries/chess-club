@@ -1,15 +1,39 @@
-<h1>Resend confirmation instructions</h1>
-
-<%= form_for :user, Routes.user_confirmation_path(@conn, :create), fn f -> %>
-  <%= label f, :email %>
-  <%= email_input f, :email, required: true %>
-
+<div class="min-h-screen flex items-center justify-center bg-gray-51 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-8">
   <div>
-    <%= submit "Resend confirmation instructions" %>
+    <img class="mx-auto h-12 w-auto" src="/images/logo-basic-matching.svg" alt="Workflow">
+    <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+      Resend confirmation instructions
+    </h2>
   </div>
-<% end %>
 
-<p>
-  <%= link "Register", to: Routes.user_registration_path(@conn, :new) %> |
-  <%= link "Log in", to: Routes.user_session_path(@conn, :new) %>
-</p>
+    <%= form_for :user, Routes.user_confirmation_path(@conn, :create), [class: "space-y-6"], fn f -> %>
+      <div class="rounded-md shadow-sm -space-y-px">
+        <%= label f, :email, class: "sr-only" %>
+        <%= email_input f, :email, required: true, placeholder: "your@email.com", class: "appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm", id: "email-address" %>
+        <%= error_tag f, :email %>
+      </div>
+
+      <div class="form-group">
+        <%= submit "Resend confirmation instructions", class: "group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" %>
+      </div>
+    <% end %>
+  <%# TODO: fix this: %>
+  <p>
+    <%= link "Register", to: Routes.user_registration_path(@conn, :new) %> |
+    <%= link "Log in", to: Routes.user_session_path(@conn, :new) %>
+  </p>
+  </div>
+</div>
+
+<%# <h1>Resend confirmation instructions</h1> %>
+
+<%# <%= form_for :user, Routes.user_confirmation_path(@conn, :create), fn f -> %1> %>
+<%#   <%= label f, :email %1> %>
+<%#   <%= email_input f, :email, required: true %1> %>
+
+<%#   <div> %>
+<%#     <%= submit "Resend confirmation instructions" %1> %>
+<%#   </div> %>
+<%# <% end %1> %>
+

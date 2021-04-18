@@ -5,6 +5,9 @@ defmodule ChessClub.Accounts.UserNotifier do
   #   * Swoosh - https://hexdocs.pm/swoosh
   #   * Bamboo - https://hexdocs.pm/bamboo
   #
+  # TODO: How does Dependency Injection work in Elixir?
+  # Would like to inject a Behaviour (Which has a testable variety).
+
   import Bamboo.Email
   alias ChessClub.Mailer
 
@@ -19,9 +22,10 @@ defmodule ChessClub.Accounts.UserNotifier do
         text_body: body
       )
 
-    require Logger
-    Logger.debug(email)
+    # require Logger
+    # Logger.debug(body)
     Mailer.deliver_now(email)
+    {:ok, %{to: to, body: body}}
   end
 
   @doc """
