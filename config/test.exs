@@ -1,5 +1,10 @@
 use Mix.Config
 
+# Only in tests, remove the complexity from the password hashing algorithm
+config :argon2_elixir,
+  t_cost: 1,
+  m_cost: 8
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used
@@ -12,6 +17,8 @@ config :chess_club, ChessClub.Repo,
   hostname: "localhost",
   pool: Ecto.Adapters.SQL.Sandbox,
   ssl: false
+
+config :chess_club, ChessClub.Mailer, adapter: Bamboo.TestAdapter
 
 # Run server in CI
 config :chess_club, ChessClubWeb.Endpoint,

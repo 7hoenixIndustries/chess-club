@@ -25,6 +25,8 @@ defmodule ChessClubWeb do
       import ChessClubWeb.Gettext
       # credo:disable-for-next-line
       alias ChessClubWeb.Router.Helpers, as: Routes
+
+      plug :put_layout, "index.html"
     end
   end
 

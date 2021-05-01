@@ -1,18 +1,18 @@
 defmodule ChessClubWeb.PageController do
   use ChessClubWeb, :controller
 
-  alias ChessClub.UserManager.Guardian
-  alias Guardian.Plug
+  alias ChessClub.Accounts.UserToken
 
   def index(conn, _params) do
     conn
+    # This is the default layout. Just being explicit.
     |> put_layout("index.html")
-    |> render("index.html")
+    |> render("index.html", maybe_current_user: conn.assigns.current_user)
   end
 
   def app(conn, _) do
-    user = Plug.current_resource(conn)
-    {:ok, token, _claims} = Guardian.encode_and_sign(user)
+    user = conn.assigns[:current_user]
+    token = Base.encode64(get_session(conn, :user_token))
 
     conn
     |> put_layout("app.html")

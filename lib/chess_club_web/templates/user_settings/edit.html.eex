@@ -1,0 +1,75 @@
+<div class="min-h-screen flex items-center justify-center bg-gray-51 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-8">
+  <div>
+    <img class="mx-auto h-12 w-auto" src="/images/logo-basic-matching.svg" alt="Workflow">
+    <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+      Settings
+    </h2>
+    <p class="mt-2 text-center text-sm text-gray-600">
+      <%= link "Home", to: Routes.page_path(@conn, :index), class: "font-medium text-indigo-600 hover:text-indigo-500" %>
+    </p>
+  </div>
+
+    <h3>Change email</h3>
+    <%= form_for @email_changeset, Routes.user_settings_path(@conn, :update), [class: "space-y-6"], fn f -> %>
+      <%= if @email_changeset.action do %>
+        <div class="alert alert-danger">
+          <p>Oops, something went wrong! Please check the errors below.</p>
+        </div>
+      <% end %>
+
+      <%= hidden_input f, :action, name: "action", value: "update_email" %>
+
+      <div class="rounded-md shadow-sm -space-y-px">
+        <%= label f, :email, class: "sr-only" %>
+        <%= email_input f, :email, required: true, placeholder: "your@email.com", class: "appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm", id: "email-address" %>
+        <%= error_tag f, :email %>
+      </div>
+
+      <div class="form-group">
+        <%= label f, :current_password, "Current password", class: "sr-only" %>
+        <%= password_input f, :current_password, required: true, placeholder: "Current password", id: "current_password_for_email", class: "appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
+        <%= error_tag f, :current_password %>
+      </div>
+
+      <div class="form-group">
+        <%= submit "Change email", class: "group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" %>
+      </div>
+    <% end %>
+
+    <h3>Change password</h3>
+
+    <%= form_for @password_changeset, Routes.user_settings_path(@conn, :update), [class: "space-y-6"], fn f -> %>
+      <%= if @password_changeset.action do %>
+        <div class="alert alert-danger">
+          <p>Oops, something went wrong! Please check the errors below.</p>
+        </div>
+      <% end %>
+
+      <%= hidden_input f, :action, name: "action", value: "update_password" %>
+
+      <div class="form-group">
+        <%= label f, :password, "New password", class: "sr-only" %>
+        <%= password_input f, :password, required: true, placeholder: "Password", id: "password", class: "appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
+        <%= error_tag f, :password %>
+      </div>
+
+      <div class="form-group">
+        <%= label f, :password_confirmation, "Confirm New password", class: "sr-only" %>
+        <%= password_input f, :password_confirmation, required: true, placeholder: "Password Confirmation", id: "password_confirmation", class: "appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
+        <%= error_tag f, :password_confirmation %>
+      </div>
+
+      <div class="form-group">
+        <%= label f, :current_password, "Current password", class: "sr-only" %>
+        <%= password_input f, :current_password, required: true, placeholder: "Current password", id: "current_password_for_password", class: "appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
+        <%= error_tag f, :current_password %>
+      </div>
+
+      <div>
+        <%= submit "Change password", class: "group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" %>
+      </div>
+    <% end %>
+  </div>
+</div>
+

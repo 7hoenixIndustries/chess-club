@@ -17,8 +17,7 @@ defmodule ChessClubWeb.ConnCase do
 
   use ExUnit.CaseTemplate
 
-  alias ChessClub.Factory
-  alias ChessClub.UserManager.Guardian
+  alias ChessClub.AccountsFixtures
   alias Ecto.Adapters.SQL.Sandbox
 
   using do
@@ -44,16 +43,46 @@ defmodule ChessClubWeb.ConnCase do
       Sandbox.mode(ChessClub.Repo, {:shared, self()})
     end
 
-    user = Factory.insert(:user)
-    {:ok, auth_token, _claims} = Guardian.encode_and_sign(user)
+    {:ok, conn: Phoenix.ConnTest.build_conn()}
+  end
+
+  @doc """
+  Setup helper that registers and logs in users.
+
+      setup :register_and_log_in_user
+
+  It stores an updated connection and a registered user in the
+  test context.
+  """
+  def register_and_log_in_user(%{conn: conn}) do
+    user = ChessClub.AccountsFixtures.user_fixture()
+    %{conn: log_in_user(conn, user), user: user}
+  end
+
+  @doc """
+  Logs the given `user` into the `conn`.
+
+  It returns an updated `conn`.
+  """
+  def log_in_user(conn, user) do
+    token = ChessClub.Accounts.generate_user_session_token(user)
+
+    conn
+    |> Phoenix.ConnTest.init_test_session(%{})
+    |> Plug.Conn.put_session(:user_token, token)
+  end
+
+  def register_and_authenticate_user_for_api(%{conn: conn}) do
+    user = AccountsFixtures.user_fixture()
+    token = ChessClub.Accounts.generate_user_session_token(user)
 
     authorized_conn =
       Plug.Conn.put_req_header(
         Phoenix.ConnTest.build_conn(),
         "authorization",
-        "Bearer #{auth_token}"
+        "Bearer #{Base.encode64(token)}"
       )
 
-    {:ok, conn: Phoenix.ConnTest.build_conn(), authorized_conn: authorized_conn}
+    %{conn: conn, user: user, authorized_conn: authorized_conn}
   end
 end

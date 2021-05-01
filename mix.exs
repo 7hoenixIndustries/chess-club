@@ -44,9 +44,12 @@ defmodule ChessClub.MixProject do
       {:absinthe, "~> 1.5.0"},
       {:absinthe_phoenix, "~> 2.0.0"},
       {:absinthe_plug, "~> 1.5.0"},
-      {:argon2_elixir, "~> 2.4.0"},
+      {:argon2_elixir, "~> 2.0"},
+      {:bamboo, "~> 2.0.1"},
+      {:bamboo_ses, "~> 0.2.0"},
       {:ecto_sql, "~> 3.4"},
       {:erlport, "~> 0.10.1"},
+      {:ex_aws, "~> 2.2.1"},
       {:gettext, "~> 0.11"},
       {:guardian, "~> 2.1.1"},
       {:jason, "~> 1.0"},
@@ -68,7 +71,8 @@ defmodule ChessClub.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ex_machina, "~> 2.4", only: [:dev, :test]},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
-      {:phoenix_live_reload, "~> 1.2", only: :dev}
+      {:phoenix_live_reload, "~> 1.2", only: :dev},
+      {:phx_gen_auth, "~> 0.7", only: :dev}
     ]
   end
 
@@ -92,7 +96,7 @@ defmodule ChessClub.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       ci: ["cmd ./scripts/ci.bash"],
-      test: [
+      "test.once": [
         "ecto.drop --quiet",
         "cmd printf 'Dropping/creating/migrating test database'",
         "cmd printf '.'",

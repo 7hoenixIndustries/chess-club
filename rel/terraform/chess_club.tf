@@ -184,6 +184,22 @@ resource "aws_security_group" "chess_club_instance" {
   }
 }
 
+// EC2 -> SES Endpoint
+resource "aws_security_group" "ses_endpoint" {
+  name          = "allow-chess-club-to-send-email"
+  description   = "Allow chess-club to send email to SES."
+  vpc_id        = aws_vpc.chess_club.id
+
+  ingress {
+    from_port   = 25
+    to_port     = 25
+    protocol    = "tcp"
+    cidr_blocks = aws_subnet.chess_club_public.*.cidr_block
+  }
+}
+
+// Instance
+
 resource "aws_key_pair" "chess_club" {
   key_name   = "chess_club_deploy"
   public_key = file("../chess_club_key.pub")
@@ -341,7 +357,7 @@ data "aws_elb_service_account" "main" {
 
 data "aws_iam_policy_document" "chess_club" {
   statement {
-    actions   = ["s3:PutObject"]
+    actions   = [ "s3:PutObject" ]
     resources = ["${aws_s3_bucket.chess_club.arn}/alb/*"]
 
     principals {
@@ -448,4 +464,68 @@ resource "aws_route53_record" "chess_club" {
     zone_id                = aws_alb.chess_club.zone_id
     evaluate_target_health = true
   }
+}
+
+# -----------------------------------------------------------------------------
+# Create SES domain identity and DomainKeys Identified Mail (DKIM)
+# -----------------------------------------------------------------------------
+
+
+resource "aws_ses_domain_identity" "chess_club_ses_domain" {
+  domain = var.domain
+}
+
+resource "aws_route53_record" "chess_club_amazonses_verification_record" {
+  zone_id = data.aws_route53_zone.chess_club.zone_id
+  name    = "_amazonses.${var.domain}"
+  type    = "TXT"
+  ttl     = "600"
+  records = [aws_ses_domain_identity.chess_club_ses_domain.verification_token]
+}
+
+resource "aws_ses_domain_dkim" "chess_club_ses_domain_dkim" {
+  domain = aws_ses_domain_identity.chess_club_ses_domain.domain
+}
+
+resource "aws_route53_record" "chess_club_amazonses_dkim_record" {
+  count   = 3
+  zone_id = data.aws_route53_zone.chess_club.zone_id
+  name    = "${element(aws_ses_domain_dkim.chess_club_ses_domain_dkim.dkim_tokens, count.index)}._domainkey"
+  type    = "CNAME"
+  ttl     = "600"
+  records = ["${element(aws_ses_domain_dkim.chess_club_ses_domain_dkim.dkim_tokens, count.index)}.dkim.amazonses.com"]
+}
+
+data "aws_iam_policy_document" "chess_club_iam_ses_policy_document" {
+  statement {
+    actions   = ["SES:SendEmail", "SES:SendRawEmail"]
+    resources = [aws_ses_domain_identity.chess_club_ses_domain.arn]
+
+    principals {
+      identifiers = ["*"]
+      type        = "AWS"
+    }
+  }
+}
+
+resource "aws_ses_identity_policy" "chess_club_identity_policy" {
+  identity = aws_ses_domain_identity.chess_club_ses_domain.arn
+  name     = "chess_club_ses_identity_policy"
+  policy   = data.aws_iam_policy_document.chess_club_iam_ses_policy_document.json
+}
+
+resource "aws_ses_domain_identity_verification" "chess_club_verification" {
+  domain = aws_ses_domain_identity.chess_club_ses_domain.id
+  depends_on = [aws_route53_record.chess_club_amazonses_verification_record]
+}
+
+# -----------------------------------------------------------------------------
+# VPC endpoints
+# -----------------------------------------------------------------------------
+
+resource "aws_vpc_endpoint" "ses" {
+  vpc_id       = aws_vpc.chess_club.id
+  service_name = "com.amazonaws.${var.region}.email-smtp"
+  vpc_endpoint_type = "Interface"
+  security_group_ids = [aws_security_group.ses_endpoint.id]
 }

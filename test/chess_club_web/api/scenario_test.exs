@@ -3,6 +3,8 @@ defmodule ChessClubWeb.ScenarioTest do
   alias ChessClub.Learn.Move
   alias ChessClub.Repo
 
+  setup :register_and_authenticate_user_for_api
+
   describe "create scenario" do
     test "creates a new scenario", %{authorized_conn: authorized_conn} do
       assert ChessClub.Learn.Scenario |> ChessClub.all() |> Enum.empty?()
