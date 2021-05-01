@@ -1,4 +1,8 @@
 defmodule ChessClub.Accounts.User do
+  @moduledoc """
+  The User schema.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -74,10 +78,12 @@ defmodule ChessClub.Accounts.User do
   It requires the email to change otherwise an error is added.
   """
   def email_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:email])
-    |> validate_email()
-    |> case do
+    res =
+      user
+      |> cast(attrs, [:email])
+      |> validate_email()
+
+    case res do
       %{changes: %{email: _}} = changeset -> changeset
       %{} = changeset -> add_error(changeset, :email, "did not change")
     end
@@ -106,7 +112,7 @@ defmodule ChessClub.Accounts.User do
   Confirms the account by setting `confirmed_at`.
   """
   def confirm_changeset(user) do
-    now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+    now = NaiveDateTime.truncate(NaiveDateTime.utc_now(), :second)
     change(user, confirmed_at: now)
   end
 

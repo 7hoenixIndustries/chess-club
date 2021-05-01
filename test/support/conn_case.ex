@@ -17,9 +17,8 @@ defmodule ChessClubWeb.ConnCase do
 
   use ExUnit.CaseTemplate
 
-  alias ChessClub.Factory
-  alias Ecto.Adapters.SQL.Sandbox
   alias ChessClub.AccountsFixtures
+  alias Ecto.Adapters.SQL.Sandbox
 
   using do
     quote do

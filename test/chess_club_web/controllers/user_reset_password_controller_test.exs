@@ -1,9 +1,10 @@
 defmodule ChessClubWeb.UserResetPasswordControllerTest do
   use ChessClubWeb.ConnCase, async: true
 
+  import ChessClub.AccountsFixtures
+
   alias ChessClub.Accounts
   alias ChessClub.Repo
-  import ChessClub.AccountsFixtures
 
   setup do
     %{user: user_fixture()}

@@ -23,13 +23,12 @@ defmodule ChessClub.AccountsFixtures do
       |> valid_user_attributes()
       |> Accounts.register_user()
 
-    Ecto.Multi.new()
-    |> Ecto.Multi.update(:user, User.confirm_changeset(user))
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{user: user}} -> user
-      _ -> :error
-    end
+    {:ok, %{user: confirmed_user}} =
+      Ecto.Multi.new()
+      |> Ecto.Multi.update(:user, User.confirm_changeset(user))
+      |> Repo.transaction()
+
+    confirmed_user
   end
 
   def registered_but_not_confirmed_user_fixture(attrs \\ %{}) do

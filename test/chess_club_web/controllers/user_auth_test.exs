@@ -1,9 +1,10 @@
 defmodule ChessClubWeb.UserAuthTest do
   use ChessClubWeb.ConnCase, async: true
 
+  import ChessClub.AccountsFixtures
+
   alias ChessClub.Accounts
   alias ChessClubWeb.UserAuth
-  import ChessClub.AccountsFixtures
 
   @remember_me_cookie "_chess_club_web_user_remember_me"
 
@@ -139,29 +140,29 @@ defmodule ChessClubWeb.UserAuthTest do
     end
 
     test "stores the path to redirect to on GET", %{conn: conn} do
-      halted_conn =
+      halted_conn_1 =
         %{conn | request_path: "/foo", query_string: ""}
         |> fetch_flash()
         |> UserAuth.require_authenticated_user([])
 
-      assert halted_conn.halted
-      assert get_session(halted_conn, :user_return_to) == "/foo"
+      assert halted_conn_1.halted
+      assert get_session(halted_conn_1, :user_return_to) == "/foo"
 
-      halted_conn =
+      halted_conn_2 =
         %{conn | request_path: "/foo", query_string: "bar=baz"}
         |> fetch_flash()
         |> UserAuth.require_authenticated_user([])
 
-      assert halted_conn.halted
-      assert get_session(halted_conn, :user_return_to) == "/foo?bar=baz"
+      assert halted_conn_2.halted
+      assert get_session(halted_conn_2, :user_return_to) == "/foo?bar=baz"
 
-      halted_conn =
+      halted_conn_3 =
         %{conn | request_path: "/foo?bar", method: "POST"}
         |> fetch_flash()
         |> UserAuth.require_authenticated_user([])
 
-      assert halted_conn.halted
-      refute get_session(halted_conn, :user_return_to)
+      assert halted_conn_3.halted
+      refute get_session(halted_conn_3, :user_return_to)
     end
 
     test "does not redirect if user is authenticated", %{conn: conn, user: user} do

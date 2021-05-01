@@ -1,11 +1,14 @@
 defmodule ChessClub.Accounts.UserNotifier do
+  @moduledoc """
+  User Notifications for when dealing with accounts.
+  """
+
   # For simplicity, this module simply logs messages to the terminal.
   # You should replace it by a proper email or notification tool, such as:
   #
   #   * Swoosh - https://hexdocs.pm/swoosh
   #   * Bamboo - https://hexdocs.pm/bamboo
   #
-  # TODO: How does Dependency Injection work in Elixir?
   # Would like to inject a Behaviour (Which has a testable variety).
 
   import Bamboo.Email

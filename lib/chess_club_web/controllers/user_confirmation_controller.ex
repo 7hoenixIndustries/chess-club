@@ -40,7 +40,12 @@ defmodule ChessClubWeb.UserConfirmationController do
         # by some automation or by the user themselves, so we redirect without
         # a warning message.
         case conn.assigns do
-          %{current_user: %{confirmed_at: confirmed_at}} when not is_nil(confirmed_at) ->
+          %{current_user: %{confirmed_at: nil}} ->
+            conn
+            |> put_flash(:error, "User confirmation link is invalid or it has expired.")
+            |> redirect(to: "/")
+
+          %{current_user: %{confirmed_at: _confirmed_at}} ->
             redirect(conn, to: "/app")
 
           %{} ->

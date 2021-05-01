@@ -4,8 +4,10 @@ defmodule ChessClub.Accounts do
   """
 
   import Ecto.Query, warn: false
+  alias ChessClub.Accounts.User
+  alias ChessClub.Accounts.UserNotifier
+  alias ChessClub.Accounts.UserToken
   alias ChessClub.Repo
-  alias ChessClub.Accounts.{User, UserToken, UserNotifier}
 
   ## Database getters
 
@@ -201,11 +203,13 @@ defmodule ChessClub.Accounts do
       |> User.password_changeset(attrs)
       |> User.validate_current_password(password)
 
-    Ecto.Multi.new()
-    |> Ecto.Multi.update(:user, changeset)
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
-    |> Repo.transaction()
-    |> case do
+    res =
+      Ecto.Multi.new()
+      |> Ecto.Multi.update(:user, changeset)
+      |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
+      |> Repo.transaction()
+
+    case res do
       {:ok, %{user: user}} -> {:ok, user}
       {:error, :user, changeset, _} -> {:error, changeset}
     end
@@ -338,11 +342,13 @@ defmodule ChessClub.Accounts do
 
   """
   def reset_user_password(user, attrs) do
-    Ecto.Multi.new()
-    |> Ecto.Multi.update(:user, User.password_changeset(user, attrs))
-    |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
-    |> Repo.transaction()
-    |> case do
+    res =
+      Ecto.Multi.new()
+      |> Ecto.Multi.update(:user, User.password_changeset(user, attrs))
+      |> Ecto.Multi.delete_all(:tokens, UserToken.user_and_contexts_query(user, :all))
+      |> Repo.transaction()
+
+    case res do
       {:ok, %{user: user}} -> {:ok, user}
       {:error, :user, changeset, _} -> {:error, changeset}
     end

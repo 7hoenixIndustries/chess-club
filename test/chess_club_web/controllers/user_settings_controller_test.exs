@@ -1,22 +1,23 @@
 defmodule ChessClubWeb.UserSettingsControllerTest do
   use ChessClubWeb.ConnCase, async: true
 
-  alias ChessClub.Accounts
   import ChessClub.AccountsFixtures
+
+  alias ChessClub.Accounts
 
   setup :register_and_log_in_user
 
   describe "GET /users/settings" do
     test "renders settings page", %{conn: conn} do
-      conn = get(conn, Routes.user_settings_path(conn, :edit))
-      response = html_response(conn, 200)
+      edit_conn = get(conn, Routes.user_settings_path(conn, :edit))
+      response = html_response(edit_conn, 200)
       assert response =~ "Settings"
     end
 
     test "redirects if user is not logged in" do
       conn = build_conn()
-      conn = get(conn, Routes.user_settings_path(conn, :edit))
-      assert redirected_to(conn) == Routes.user_session_path(conn, :new)
+      edit_conn = get(conn, Routes.user_settings_path(conn, :edit))
+      assert redirected_to(edit_conn) == Routes.user_session_path(edit_conn, :new)
     end
   end
 
@@ -100,28 +101,35 @@ defmodule ChessClubWeb.UserSettingsControllerTest do
     end
 
     test "updates the user email once", %{conn: conn, user: user, token: token, email: email} do
-      conn = get(conn, Routes.user_settings_path(conn, :confirm_email, token))
-      assert redirected_to(conn) == Routes.user_settings_path(conn, :edit)
-      assert get_flash(conn, :info) =~ "Email changed successfully"
+      confirmed_conn = get(conn, Routes.user_settings_path(conn, :confirm_email, token))
+      assert redirected_to(confirmed_conn) == Routes.user_settings_path(confirmed_conn, :edit)
+      assert get_flash(confirmed_conn, :info) =~ "Email changed successfully"
       refute Accounts.get_user_by_email(user.email)
       assert Accounts.get_user_by_email(email)
 
-      conn = get(conn, Routes.user_settings_path(conn, :confirm_email, token))
-      assert redirected_to(conn) == Routes.user_settings_path(conn, :edit)
-      assert get_flash(conn, :error) =~ "Email change link is invalid or it has expired"
+      expired_conn =
+        get(confirmed_conn, Routes.user_settings_path(confirmed_conn, :confirm_email, token))
+
+      assert redirected_to(expired_conn) == Routes.user_settings_path(expired_conn, :edit)
+      assert get_flash(expired_conn, :error) =~ "Email change link is invalid or it has expired"
     end
 
     test "does not update email with invalid token", %{conn: conn, user: user} do
-      conn = get(conn, Routes.user_settings_path(conn, :confirm_email, "oops"))
-      assert redirected_to(conn) == Routes.user_settings_path(conn, :edit)
-      assert get_flash(conn, :error) =~ "Email change link is invalid or it has expired"
+      invalid_token_conn = get(conn, Routes.user_settings_path(conn, :confirm_email, "oops"))
+
+      assert redirected_to(invalid_token_conn) ==
+               Routes.user_settings_path(invalid_token_conn, :edit)
+
+      assert get_flash(invalid_token_conn, :error) =~
+               "Email change link is invalid or it has expired"
+
       assert Accounts.get_user_by_email(user.email)
     end
 
     test "redirects if user is not logged in", %{token: token} do
       conn = build_conn()
-      conn = get(conn, Routes.user_settings_path(conn, :confirm_email, token))
-      assert redirected_to(conn) == Routes.user_session_path(conn, :new)
+      confirmed_conn = get(conn, Routes.user_settings_path(conn, :confirm_email, token))
+      assert redirected_to(confirmed_conn) == Routes.user_session_path(confirmed_conn, :new)
     end
   end
 end

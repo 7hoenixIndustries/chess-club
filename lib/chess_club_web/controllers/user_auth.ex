@@ -1,10 +1,15 @@
 defmodule ChessClubWeb.UserAuth do
-  require Logger
+  @moduledoc """
+  The UserAuth context.
+  """
+
   import Phoenix.Controller
   import Plug.Conn
 
   alias ChessClub.Accounts
-  alias ChessClubWeb.Router.Helpers, as: Routes
+  alias ChessClubWeb.Router.Helpers
+
+  require Logger
 
   # Make the remember me cookie valid for 60 days.
   # If you want bump or reduce this value, also change
@@ -153,14 +158,14 @@ defmodule ChessClubWeb.UserAuth do
         conn
         |> put_flash(:info, "You must confirm your email to continue.")
         |> maybe_store_return_to()
-        |> redirect(to: Routes.page_path(conn, :index))
+        |> redirect(to: Helpers.page_path(conn, :index))
         |> halt()
 
       true ->
         conn
         |> put_flash(:error, "You must log in to access this page.")
         |> maybe_store_return_to()
-        |> redirect(to: Routes.user_session_path(conn, :new))
+        |> redirect(to: Helpers.user_session_path(conn, :new))
         |> halt()
     end
   end

@@ -1,9 +1,10 @@
 defmodule ChessClubWeb.UserSocket do
-  import Logger
   use Phoenix.Socket
   use Absinthe.Phoenix.Socket, schema: ChessClubWeb.Schema
 
   alias ChessClub.Accounts
+
+  require Logger
 
   ## Channels
   # channel "room:*", ChessClubWeb.RoomChannel

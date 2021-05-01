@@ -1,9 +1,10 @@
 defmodule ChessClubWeb.UserConfirmationControllerTest do
   use ChessClubWeb.ConnCase, async: true
 
+  import ChessClub.AccountsFixtures
+
   alias ChessClub.Accounts
   alias ChessClub.Repo
-  import ChessClub.AccountsFixtures
 
   setup do
     %{user: registered_but_not_confirmed_user_fixture()}
@@ -70,18 +71,20 @@ defmodule ChessClubWeb.UserConfirmationControllerTest do
       assert Repo.all(Accounts.UserToken) == []
 
       # When not logged in
-      conn = get(conn, Routes.user_confirmation_path(conn, :confirm, token))
-      assert redirected_to(conn) == "/"
-      assert get_flash(conn, :error) =~ "User confirmation link is invalid or it has expired"
+      not_logged_in_conn = get(conn, Routes.user_confirmation_path(conn, :confirm, token))
+      assert redirected_to(not_logged_in_conn) == "/"
+
+      assert get_flash(not_logged_in_conn, :error) =~
+               "User confirmation link is invalid or it has expired"
 
       # When logged in
-      conn =
+      logged_in_conn =
         build_conn()
         |> log_in_user(user)
-        |> get(Routes.user_confirmation_path(conn, :confirm, token))
+        |> get(Routes.user_confirmation_path(not_logged_in_conn, :confirm, token))
 
-      assert redirected_to(conn) == "/app"
-      refute get_flash(conn, :error)
+      assert redirected_to(logged_in_conn) == "/app"
+      refute get_flash(logged_in_conn, :error)
     end
 
     test "does not confirm email with invalid token", %{conn: conn, user: user} do

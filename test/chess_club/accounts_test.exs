@@ -1,9 +1,11 @@
 defmodule ChessClub.AccountsTest do
   use ChessClub.DataCase
 
-  alias ChessClub.Accounts
   import ChessClub.AccountsFixtures
-  alias ChessClub.Accounts.{User, UserToken}
+
+  alias ChessClub.Accounts
+  alias ChessClub.Accounts.User
+  alias ChessClub.Accounts.UserToken
 
   describe "get_user_by_email/1" do
     test "does not return the user if the email does not exist" do
@@ -75,12 +77,12 @@ defmodule ChessClub.AccountsTest do
 
     test "validates email uniqueness" do
       %{email: email} = user_fixture()
-      {:error, changeset} = Accounts.register_user(%{email: email})
-      assert "has already been taken" in errors_on(changeset).email
+      {:error, already_taken_changeset} = Accounts.register_user(%{email: email})
+      assert "has already been taken" in errors_on(already_taken_changeset).email
 
       # Now try with the upper cased email too, to check that email case is ignored.
-      {:error, changeset} = Accounts.register_user(%{email: String.upcase(email)})
-      assert "has already been taken" in errors_on(changeset).email
+      {:error, upper_cased_changeset} = Accounts.register_user(%{email: String.upcase(email)})
+      assert "has already been taken" in errors_on(upper_cased_changeset).email
     end
 
     test "registers users with a hashed password" do
@@ -184,8 +186,8 @@ defmodule ChessClub.AccountsTest do
           Accounts.deliver_update_email_instructions(user, "current@example.com", url)
         end)
 
-      {:ok, token} = Base.url_decode64(token, padding: false)
-      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
+      {:ok, decoded_token} = Base.url_decode64(token, padding: false)
+      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, decoded_token))
       assert user_token.user_id == user.id
       assert user_token.sent_to == user.email
       assert user_token.context == "change:current@example.com"
@@ -372,8 +374,8 @@ defmodule ChessClub.AccountsTest do
           Accounts.deliver_user_confirmation_instructions(user, url)
         end)
 
-      {:ok, token} = Base.url_decode64(token, padding: false)
-      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
+      {:ok, decoded_token} = Base.url_decode64(token, padding: false)
+      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, decoded_token))
       assert user_token.user_id == user.id
       assert user_token.sent_to == user.email
       assert user_token.context == "confirm"
@@ -425,8 +427,8 @@ defmodule ChessClub.AccountsTest do
           Accounts.deliver_user_reset_password_instructions(user, url)
         end)
 
-      {:ok, token} = Base.url_decode64(token, padding: false)
-      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
+      {:ok, decoded_token} = Base.url_decode64(token, padding: false)
+      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, decoded_token))
       assert user_token.user_id == user.id
       assert user_token.sent_to == user.email
       assert user_token.context == "reset_password"
