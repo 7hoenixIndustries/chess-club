@@ -519,6 +519,12 @@ resource "aws_ses_domain_identity_verification" "chess_club_verification" {
   depends_on = [aws_route53_record.chess_club_amazonses_verification_record]
 }
 
+resource "aws_iam_instance_profile" "club_email" {
+  name = "club_email"
+  role = aws_iam_role.role.name
+}
+
+
 # -----------------------------------------------------------------------------
 # VPC endpoints
 # -----------------------------------------------------------------------------
