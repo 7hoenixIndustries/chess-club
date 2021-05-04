@@ -44,7 +44,7 @@ type Settings
 
 type Page
     = NotFound Session.Data
-    | Learn Learn.Model
+    | Learn Session.Data Learn.Model
 
 
 
@@ -54,7 +54,7 @@ type Page
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model.page of
-        Learn learnModel ->
+        Learn _ learnModel ->
             Sub.map LearnMsg <| Learn.subscriptions learnModel
 
         NotFound _ ->
@@ -80,7 +80,7 @@ view model =
                 , children = Problem.notFound
                 }
 
-        Learn learn ->
+        Learn _ learn ->
             Skeleton.view (Skeleton.Callbacks SetNavbarOpen) model.backend LearnMsg (Learn.view learn)
 
 
@@ -138,16 +138,16 @@ update message model =
 
         LearnMsg msg ->
             case model.page of
-                Learn learn ->
+                Learn _ learn ->
                     stepLearn model (Learn.update model.backend msg learn)
 
-                _ ->
+                NotFound _ ->
                     ( model, Cmd.none )
 
 
 stepLearn : Model -> ( Learn.Model, Cmd Learn.Msg ) -> ( Model, Cmd Msg )
 stepLearn model ( learn, cmds ) =
-    ( { model | page = Learn learn }
+    ( { model | page = Learn (extractSession model.page) learn }
     , Cmd.map LearnMsg cmds
     )
 
@@ -162,8 +162,8 @@ exit model =
         NotFound session ->
             session
 
-        Learn m ->
-            m.session
+        Learn session _ ->
+            session
 
 
 
@@ -179,7 +179,7 @@ stepUrl url model =
         parser =
             oneOf
                 [ route (s "app")
-                    (stepLearn model (Learn.init model.backend session))
+                    (stepLearn model (Learn.init Learn.Join model.backend session))
                 ]
     in
     case Parser.parse parser url of
@@ -195,3 +195,12 @@ stepUrl url model =
 route : Parser a b -> a -> Parser (b -> c) c
 route parser handler =
     Parser.map handler parser
+
+
+extractSession page =
+    case page of
+        NotFound session ->
+            session
+
+        Learn session _ ->
+            session

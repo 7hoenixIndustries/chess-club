@@ -1,11 +1,29 @@
 module Page.Learn exposing
-    ( Model
+    ( Configuration(..)
+    , Model
     , Msg
     , init
     , subscriptions
     , update
     , view
     )
+
+{-| Configuration
+
+This module supports two different flows.
+
+They are able to switch between each other based on what the user actually chooses,
+but you get to pick which one to start with. <- this is handy for if you want to be able
+to help someone get right back to where they were if they are ever disconnected.
+
+The two flows are joining & learning.
+
+  - Joining means that you are looking through available scenarios aiming to choose one.
+      - Current numbers on each team changes percentage likelihood to join each team.
+  - Learning means that you are subscribing to a scenario.
+      - Currently, and (perhaps always will only) support(s) one at a time.
+
+-}
 
 import Api.Scalar exposing (Id)
 import Backend exposing (Backend)
@@ -21,14 +39,66 @@ import Json.Decode
 import Page.Learn.Scenario as Scenario exposing (Fen(..), Move, scenarioSelection, subscribeToMoves)
 import Prelude
 import Session
+import Set exposing (Set)
 import Skeleton
+import Vote.Main
+
+
+{-| Configuration
+
+joining : Joining
+joining =
+Joining Set.empty Set.empty
+
+learning : Learning
+learning =
+Learning Internal
+
+-}
+type Configuration
+    = Join
+    | Learn
 
 
 
 -- MODEL
 
 
-type alias Model =
+type Model
+    = Learning Internal
+    | Joining (JoinOdds Membership)
+
+
+type JoinOdds membership
+    = JoinOdds membership
+
+
+type Membership
+    = Membership TeamThatGoesFirst TeamThatGoesSecond
+
+
+type TeamThatGoesFirst
+    = TeamThatGoesFirst (Set Player)
+
+
+type TeamThatGoesSecond
+    = TeamThatGoesSecond (Set Player)
+
+
+type Player
+    = Player Settings
+
+
+{-| This is where we plug in the Livery section.
+
+type Settings = Settings Livery
+
+-}
+type Settings
+    = Settings
+
+
+type alias Internal =
     { chessModel : Maybe Chess.Model
     , session : Session.Data
     , scenarios : Scenarios
@@ -49,30 +119,35 @@ type Scenarios
     | Success (List Scenario.Scenario2)
 
 
-init : Backend -> Session.Data -> ( Model, Cmd Msg )
-init backend session =
-    case Session.getScenarios session of
-        Just entries ->
-            ( Model Nothing session (Success entries) NotConnected Nothing
-            , Cmd.none
-            )
+init : Configuration -> Backend -> Session.Data -> ( Model, Cmd Msg )
+init configuration backend session =
+    case configuration of
+        Join ->
+            ( Joining (JoinOdds (Membership (TeamThatGoesFirst Set.empty) (TeamThatGoesSecond Set.empty))), Cmd.none )
 
-        Nothing ->
-            let
-                runSpecific =
-                    --Debug.log "Ensuring not possible to release" (Just "17")
-                    Nothing
-            in
-            ( Model Nothing session Loading NotConnected Nothing
-            , Cmd.batch
-                [ case runSpecific of
-                    Nothing ->
-                        Scenario.getScenarios backend GotScenarios
+        Learn ->
+            case Session.getScenarios session of
+                Just entries ->
+                    ( Learning <| Internal Nothing session (Success entries) NotConnected Nothing
+                    , Cmd.none
+                    )
 
-                    Just id ->
-                        Scenario.getScenario backend (Api.Scalar.Id id) GotScenario
-                ]
-            )
+                Nothing ->
+                    let
+                        runSpecific =
+                            --Debug.log "Ensuring not possible to release" (Just "17")
+                            Nothing
+                    in
+                    ( Learning <| Internal Nothing session Loading NotConnected Nothing
+                    , Cmd.batch
+                        [ case runSpecific of
+                            Nothing ->
+                                Scenario.getScenarios backend GotScenarios
+
+                            Just id ->
+                                Scenario.getScenario backend (Api.Scalar.Id id) GotScenario
+                        ]
+                    )
 
 
 
@@ -94,20 +169,40 @@ type Msg
 
 update : Backend -> Msg -> Model -> ( Model, Cmd Msg )
 update backend msg model =
+    case model of
+        Learning internal ->
+            upateLearning backend msg internal
+
+        Joining (JoinOdds membership) ->
+            ( model, Cmd.none )
+
+
+upateLearning backend msg model =
     case msg of
         ChessMsg chessMsg ->
             case model.chessModel of
                 Nothing ->
-                    ( model, Cmd.none )
+                    ( Learning <| model, Cmd.none )
 
                 Just chessModel ->
                     stepChess model (Chess.update (Chess.Callbacks MakeMove ChessMsg) chessMsg chessModel)
+                        |> Tuple.mapFirst Learning
 
+        --VoteMsg chessMsg ->
+        --    case model.chessModel of
+        --        Nothing ->
+        --            ( model, Cmd.none )
+        --
+        --        Just chessModel ->
+        --            stepChess model (Chess.update (Chess.Callbacks MakeMove ChessMsg) chessMsg chessModel)
+        -- Scenario Stuff
         CreateScenario ->
             ( model, Scenario.createScenario backend ScenarioCreated )
+                |> Tuple.mapFirst Learning
 
         GetScenario id ->
             ( model, Scenario.getScenario backend id GotScenario )
+                |> Tuple.mapFirst Learning
 
         GotScenarios result ->
             case result of
@@ -115,6 +210,7 @@ update backend msg model =
                     ( { model | scenarios = Failure }
                     , Cmd.none
                     )
+                        |> Tuple.mapFirst Learning
 
                 Ok scenarios ->
                     ( { model
@@ -123,6 +219,7 @@ update backend msg model =
                       }
                     , Cmd.none
                     )
+                        |> Tuple.mapFirst Learning
 
         GotScenario result ->
             case result of
@@ -130,6 +227,7 @@ update backend msg model =
                     ( model
                     , Cmd.none
                     )
+                        |> Tuple.mapFirst Learning
 
                 Ok scenario ->
                     let
@@ -146,6 +244,7 @@ update backend msg model =
                         , chessMsg
                         ]
                     )
+                        |> Tuple.mapFirst Learning
 
         MakeMove move ->
             case model.scenario of
@@ -153,12 +252,15 @@ update backend msg model =
                     ( model
                     , Scenario.makeMove backend scenario.id move SentMove
                     )
+                        |> Tuple.mapFirst Learning
 
                 Nothing ->
                     ( model, Cmd.none )
+                        |> Tuple.mapFirst Learning
 
         NewSubscriptionStatus status () ->
             ( { model | subscriptionStatus = status }, Cmd.none )
+                |> Tuple.mapFirst Learning
 
         ScenarioCreated result ->
             case result of
@@ -166,20 +268,24 @@ update backend msg model =
                     ( model
                     , Cmd.none
                     )
+                        |> Tuple.mapFirst Learning
 
                 Ok id ->
                     case model.scenarios of
                         Success scenarios ->
                             ( { model | scenarios = Success <| scenarios ++ [ Scenario.Seed <| Scenario.ScenarioSeed id ] }, Scenario.getScenario backend id GotScenario )
+                                |> Tuple.mapFirst Learning
 
                         -- This state should not be possible (assuming we aren't able to click the create button unless we are loaded.
                         _ ->
                             ( model
                             , Cmd.none
                             )
+                                |> Tuple.mapFirst Learning
 
         SentMove _ ->
             ( model, Cmd.none )
+                |> Tuple.mapFirst Learning
 
         SubscriptionDataReceived newData ->
             case model.scenario of
@@ -194,6 +300,7 @@ update backend msg model =
                                       }
                                     , Cmd.none
                                     )
+                                        |> Tuple.mapFirst Learning
 
                                 Just chessModel ->
                                     let
@@ -206,16 +313,19 @@ update backend msg model =
                                       }
                                     , chessMsgs
                                     )
+                                        |> Tuple.mapFirst Learning
 
                         Err error ->
                             -- TODO: Display error so they know to refresh.
                             ( model, Cmd.none )
+                                |> Tuple.mapFirst Learning
 
                 Nothing ->
                     ( model, Cmd.none )
+                        |> Tuple.mapFirst Learning
 
 
-stepChess : Model -> ( Chess.Model, Cmd Msg ) -> ( Model, Cmd Msg )
+stepChess : Internal -> ( Chess.Model, Cmd Msg ) -> ( Internal, Cmd Msg )
 stepChess model ( chessModel, chessCmds ) =
     ( { model | chessModel = Just chessModel }, chessCmds )
 
@@ -232,9 +342,15 @@ view model =
     , warning = Skeleton.NoProblems
     , attrs = [ class "container mx-auto px-4" ]
     , children =
-        [ lazy3 viewLearn model.scenario model.chessModel model.subscriptionStatus
-        , lazy viewScenarios model.scenarios
-        ]
+        case model of
+            Joining internal ->
+                [ Vote.Main.view
+                ]
+
+            Learning internal ->
+                [ lazy3 viewLearn internal.scenario internal.chessModel internal.subscriptionStatus
+                , lazy viewScenarios internal.scenarios
+                ]
     }
 
 
@@ -391,9 +507,14 @@ backgroundColor color =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.batch
-        [ Js.gotSubscriptionData SubscriptionDataReceived
-        , Js.socketStatusConnected (NewSubscriptionStatus Connected)
-        , Js.socketStatusReconnecting (NewSubscriptionStatus Reconnecting)
-        , Prelude.maybe Sub.none (\chessModel -> Sub.map ChessMsg (Chess.subscriptions chessModel)) model.chessModel
-        ]
+    case model of
+        Learning internal ->
+            Sub.batch
+                [ Js.gotSubscriptionData SubscriptionDataReceived
+                , Js.socketStatusConnected (NewSubscriptionStatus Connected)
+                , Js.socketStatusReconnecting (NewSubscriptionStatus Reconnecting)
+                , Prelude.maybe Sub.none (\chessModel -> Sub.map ChessMsg (Chess.subscriptions chessModel)) internal.chessModel
+                ]
+
+        Joining (JoinOdds membership) ->
+            Sub.none

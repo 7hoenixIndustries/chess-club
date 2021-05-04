@@ -63,7 +63,7 @@ viewAll callbacks backend toMsg details =
         [ viewShell callbacks details.navbarOpen <| viewBody toMsg details
 
         --viewHeader <| [ Link (backend.endpoint ++ "/app") "7I" ] ++ details.header
-        , viewFooter
+        --, viewFooter
         ]
 
 
