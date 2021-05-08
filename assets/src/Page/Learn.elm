@@ -27,6 +27,7 @@ The two flows are joining & learning.
 
 import Api.Scalar exposing (Id)
 import Backend exposing (Backend)
+import Chess.Logic as Logic
 import Chess.MetaGame as Chess
 import Graphql.Document
 import Graphql.Http
@@ -66,7 +67,7 @@ type Configuration
 
 type Model
     = Learning Internal
-    | Joining (JoinOdds Membership)
+    | Joining Logic.Model (JoinOdds Membership)
 
 
 type JoinOdds membership
@@ -123,7 +124,13 @@ init : Configuration -> Backend -> Session.Data -> ( Model, Cmd Msg )
 init configuration backend session =
     case configuration of
         Join ->
-            ( Joining (JoinOdds (Membership (TeamThatGoesFirst Set.empty) (TeamThatGoesSecond Set.empty))), Cmd.none )
+            case Logic.init2 (Fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2") of
+                Ok gameModel ->
+                    ( Joining gameModel (JoinOdds (Membership (TeamThatGoesFirst Set.empty) (TeamThatGoesSecond Set.empty))), Cmd.none )
+
+                Err bad ->
+                    --( Joining (JoinOdds (Membership (TeamThatGoesFirst Set.empty) (TeamThatGoesSecond Set.empty))), Cmd.none )
+                    Debug.todo "Debug failed from bad game state."
 
         Learn ->
             case Session.getScenarios session of
@@ -173,7 +180,7 @@ update backend msg model =
         Learning internal ->
             upateLearning backend msg internal
 
-        Joining (JoinOdds membership) ->
+        Joining _ (JoinOdds membership) ->
             ( model, Cmd.none )
 
 
@@ -343,8 +350,8 @@ view model =
     , attrs = [ class "container mx-auto px-4" ]
     , children =
         case model of
-            Joining internal ->
-                [ Vote.Main.view
+            Joining chessState internal ->
+                [ Vote.Main.view chessState
                 ]
 
             Learning internal ->
@@ -516,5 +523,5 @@ subscriptions model =
                 , Prelude.maybe Sub.none (\chessModel -> Sub.map ChessMsg (Chess.subscriptions chessModel)) internal.chessModel
                 ]
 
-        Joining (JoinOdds membership) ->
+        Joining _ (JoinOdds membership) ->
             Sub.none

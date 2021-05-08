@@ -5,8 +5,9 @@ module Vote.Main exposing (view)
 -- This file is generated. Please do not edit.
 -}
 
+import Chess.Logic as Logic
 import Html exposing (Html, a, dd, div, dl, dt, h3, li, nav, p, span, text, ul)
-import Html.Attributes as Attr
+import Html.Attributes as Attr exposing (class)
 import Svg exposing (path, svg)
 import Svg.Attributes as SvgAttr
 
@@ -15,8 +16,8 @@ type Model
     = Model
 
 
-view : Html msg
-view =
+view : Logic.Model -> Html msg
+view chessModel =
     let
         emptyState =
             Html.text ""
@@ -24,13 +25,13 @@ view =
     --emptyState
     {- This example requires Tailwind CSS v2.0+ -}
     div []
-        [ card
+        [ card chessModel
 
         --, viewSelection
         ]
 
 
-card =
+card chessModel =
     {- This example requires Tailwind CSS v2.0+ -}
     div
         [ Attr.class "bg-white shadow overflow-hidden sm:rounded-lg"
@@ -40,7 +41,7 @@ card =
 
             --Attr.class "px-4 py-5 sm:px-6"
             ]
-            [ viewSelection
+            [ viewSelection chessModel
             , viewNavigation
             ]
         ]
@@ -212,7 +213,45 @@ card =
 --]
 
 
-viewSelection =
+viewSelection chessModel =
+    let
+        sideBySide rightSide =
+            div [ class "flex flex-col sm:flex-col md:flex-col lg:flex-row xl:flex-row 2xl:flex-row" ]
+                [ div [ class "flex-grow flex-shrink-0" ] [ Logic.view chessModel ]
+                , div [ class "flex-shrink-0" ]
+                    rightSide
+
+                --[
+                -- --div [] [ h3 [ Attr.class "text-xl h-16" ] [ text "Details" ] ]
+                ----, viewLegend
+                ----    (Settings
+                ----        { recentMove = True
+                ----        , reinforcing = List.isEmpty reinforcing |> not
+                ----        , opponentReinforcing = List.isEmpty opponentReinforcing |> not
+                ----        }
+                ----    )
+                --]
+                ]
+
+        els =
+            [ div []
+                [ dl
+                    [ --Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+                      Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+                    ]
+                    [ foo
+                    ]
+                ]
+            , div []
+                [ dl
+                    [ --Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+                      Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+                    ]
+                    [ bar
+                    ]
+                ]
+            ]
+    in
     div [ Attr.class "m-6" ]
         [ div []
             [ h3
@@ -220,28 +259,23 @@ viewSelection =
                 ]
                 [ text "Join this Scenario?" ]
             ]
-        , div []
-            [ dl
-                [ --Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
-                  Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
-                ]
-                [ foo
-                ]
-            ]
-        , div []
-            [ dl
-                [ --Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
-                  Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
-                ]
-                [ bar
-                ]
-            ]
+        , sideBySide els
 
         --, div []
-        --    [ h3
-        --        [ Attr.class "text-lg leading-6 font-medium text-gray-900"
+        --    [ dl
+        --        [ --Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        --          Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
         --        ]
-        --        [ text "Join this Scenario?" ]
+        --        [ foo
+        --        ]
+        --    ]
+        --, div []
+        --    [ dl
+        --        [ --Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        --          Attr.class "mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        --        ]
+        --        [ bar
+        --        ]
         --    ]
         ]
 
