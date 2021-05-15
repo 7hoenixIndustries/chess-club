@@ -1,6 +1,6 @@
 module Skeleton exposing
     ( Callbacks
-    , Details
+    , Details(..)
     , Warning(..)
     , view
     )
@@ -20,14 +20,15 @@ import Svg.Attributes as SvgAttr
 -- NODE
 
 
-type alias Details msg =
-    { title : String
-    , navbarOpen : Bool
-    , header : List Segment
-    , warning : Warning
-    , attrs : List (Html.Attribute msg)
-    , children : List (Html msg)
-    }
+type Details msg
+    = Details
+        { title : String
+        , navbarOpen : Bool
+        , header : List Segment
+        , warning : Warning
+        , attrs : List (Html.Attribute msg)
+        , children : List (Html msg)
+        }
 
 
 type Warning
@@ -48,19 +49,19 @@ type alias Callbacks msg =
 
 
 view : Callbacks msg -> Backend -> (a -> msg) -> Details a -> Browser.Document msg
-view callbacks backend toMsg details =
+view callbacks backend toMsg (Details details) =
     { title =
         details.title
     , body =
-        [ viewAll callbacks backend toMsg details
+        [ viewAll callbacks backend toMsg (Details details)
         ]
     }
 
 
 viewAll : Callbacks msg -> Backend -> (a -> msg) -> Details a -> Html msg
-viewAll callbacks backend toMsg details =
-    div [ class "flex flex-col w-screen min-h-screen" ]
-        [ viewShell callbacks details.navbarOpen <| viewBody toMsg details
+viewAll callbacks backend toMsg (Details details) =
+    div [ id "main", class "flex flex-col w-screen min-h-screen" ]
+        [ viewShell callbacks details.navbarOpen <| viewBody toMsg (Details details)
 
         --viewHeader <| [ Link (backend.endpoint ++ "/app") "7I" ] ++ details.header
         --, viewFooter
@@ -68,7 +69,7 @@ viewAll callbacks backend toMsg details =
 
 
 viewBody : (a -> msg) -> Details a -> Html msg
-viewBody toMsg details =
+viewBody toMsg (Details details) =
     div [ class "container mx-auto flex-1 flex flex-col mt-10 section font-mono" ]
         [ lazy viewWarning details.warning
         , Html.map toMsg <|

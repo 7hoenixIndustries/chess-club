@@ -2,11 +2,15 @@ module Main exposing (main)
 
 import Backend exposing (Backend)
 import Browser
+import Browser.Dom
+import Browser.Events
 import Browser.Navigation as Nav
 import Page.Learn as Learn
 import Page.Problem as Problem
+import Responsive exposing (Responsive)
 import Session
-import Skeleton
+import Skeleton exposing (Details(..))
+import Task
 import Url
 import Url.Parser as Parser exposing ((</>), Parser, custom, fragment, map, oneOf, s, top)
 
@@ -30,12 +34,18 @@ main =
 -- MODEL
 
 
-type alias Model =
-    { key : Nav.Key
-    , page : Page
-    , backend : Backend
-    , settings : Settings
-    }
+type Model
+    = Model
+        Shell
+        { key : Nav.Key
+        , page : Page
+        , backend : Backend
+        , settings : Settings
+        }
+
+
+type Shell
+    = Shell Responsive
 
 
 type Settings
@@ -52,13 +62,16 @@ type Page
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    case model.page of
-        Learn _ learnModel ->
-            Sub.map LearnMsg <| Learn.subscriptions learnModel
+subscriptions (Model _ model) =
+    Sub.batch
+        [ case model.page of
+            Learn _ learnModel ->
+                Sub.map LearnMsg <| Learn.subscriptions learnModel
 
-        NotFound _ ->
-            Sub.none
+            NotFound _ ->
+                Sub.none
+        , Browser.Events.onResize WindowResized
+        ]
 
 
 
@@ -66,22 +79,25 @@ subscriptions model =
 
 
 view : Model -> Browser.Document Msg
-view model =
+view (Model (Shell responsive) model) =
     case model.page of
         NotFound _ ->
-            Skeleton.view (Skeleton.Callbacks SetNavbarOpen)
+            Skeleton.view
+                (Skeleton.Callbacks SetNavbarOpen)
                 model.backend
                 never
-                { title = "Not Found"
-                , navbarOpen = True
-                , header = []
-                , warning = Skeleton.NoProblems
-                , attrs = Problem.styles
-                , children = Problem.notFound
-                }
+                (Details
+                    { title = "Not Found"
+                    , navbarOpen = True
+                    , header = []
+                    , warning = Skeleton.NoProblems
+                    , attrs = Problem.styles
+                    , children = Problem.notFound
+                    }
+                )
 
         Learn _ learn ->
-            Skeleton.view (Skeleton.Callbacks SetNavbarOpen) model.backend LearnMsg (Learn.view learn)
+            Skeleton.view (Skeleton.Callbacks SetNavbarOpen) model.backend LearnMsg (Learn.view responsive learn)
 
 
 
@@ -91,17 +107,23 @@ view model =
 type alias Flags =
     { backendEndpoint : String
     , authToken : String
+    , width : Int
+    , height : Int
     }
 
 
 init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
-init { backendEndpoint, authToken } url key =
+init { backendEndpoint, authToken, width, height } url key =
     stepUrl url
-        { key = key
-        , page = NotFound Session.empty
-        , backend = Backend.api backendEndpoint authToken
-        , settings = Settings { navbarOpen = True }
-        }
+        (Model
+            (Shell <| Responsive.init { width = width, height = height })
+            { key = key
+            , page = NotFound Session.empty
+            , backend = Backend.api backendEndpoint authToken
+            , settings = Settings { navbarOpen = True }
+            }
+        )
+        |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, getBrowserWindow ])
 
 
 
@@ -109,45 +131,66 @@ init { backendEndpoint, authToken } url key =
 
 
 type Msg
-    = LinkClicked Browser.UrlRequest
+    = GotBrowserElement (Result Browser.Dom.Error Browser.Dom.Viewport)
+    | LinkClicked Browser.UrlRequest
     | LearnMsg Learn.Msg
     | SetNavbarOpen Bool
     | UrlChanged Url.Url
+    | WindowResized Int Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update message model =
+update message (Model shell model) =
     case message of
+        GotBrowserElement result ->
+            case result of
+                Err failed ->
+                    let
+                        hi =
+                            Debug.log "failed" failed
+                    in
+                    ( Model shell model, Cmd.none )
+
+                Ok mainNode ->
+                    let
+                        hi =
+                            Debug.log "mainNod" mainNode
+                    in
+                    ( Model shell model, Cmd.none )
+
         LinkClicked urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
-                    ( model
+                    ( Model shell model
                     , Nav.pushUrl model.key (Url.toString url)
                     )
 
                 Browser.External href ->
-                    ( model
+                    ( Model shell model
                     , Nav.load href
                     )
 
         UrlChanged url ->
-            stepUrl url model
+            stepUrl url (Model shell model)
 
         SetNavbarOpen navbarOpen ->
-            ( { model | settings = Settings { navbarOpen = navbarOpen } }, Cmd.none )
+            ( Model shell { model | settings = Settings { navbarOpen = navbarOpen } }, Cmd.none )
 
         LearnMsg msg ->
             case model.page of
                 Learn _ learn ->
-                    stepLearn model (Learn.update model.backend msg learn)
+                    stepLearn (Model shell model) (Learn.update model.backend msg learn)
 
                 NotFound _ ->
-                    ( model, Cmd.none )
+                    ( Model shell model, Cmd.none )
+
+        WindowResized width height ->
+            ( Model (Shell <| Responsive.init { width = width, height = height }) model, Cmd.none )
 
 
 stepLearn : Model -> ( Learn.Model, Cmd Learn.Msg ) -> ( Model, Cmd Msg )
-stepLearn model ( learn, cmds ) =
-    ( { model | page = Learn (extractSession model.page) learn }
+stepLearn (Model shell model) ( learn, cmds ) =
+    ( Model shell { model | page = Learn (extractSession model.page) learn }
     , Cmd.map LearnMsg cmds
     )
 
@@ -157,7 +200,7 @@ stepLearn model ( learn, cmds ) =
 
 
 exit : Model -> Session.Data
-exit model =
+exit (Model shell model) =
     case model.page of
         NotFound session ->
             session
@@ -171,15 +214,15 @@ exit model =
 
 
 stepUrl : Url.Url -> Model -> ( Model, Cmd Msg )
-stepUrl url model =
+stepUrl url (Model ((Shell responsive) as shell) model) =
     let
         session =
-            exit model
+            exit (Model shell model)
 
         parser =
             oneOf
                 [ route (s "app")
-                    (stepLearn model (Learn.init Learn.Join model.backend session))
+                    (stepLearn (Model shell model) (Learn.init Learn.Join model.backend session))
                 ]
     in
     case Parser.parse parser url of
@@ -187,7 +230,7 @@ stepUrl url model =
             answer
 
         Nothing ->
-            ( { model | page = NotFound session }
+            ( Model shell { model | page = NotFound session }
             , Cmd.none
             )
 
@@ -204,3 +247,8 @@ extractSession page =
 
         Learn session _ ->
             session
+
+
+getBrowserWindow : Cmd Msg
+getBrowserWindow =
+    Task.attempt GotBrowserElement (Browser.Dom.getViewportOf "main")

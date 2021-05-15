@@ -37,6 +37,7 @@ import Html.Lazy exposing (lazy, lazy2, lazy3)
 import Json.Decode as D
 import Json.Encode as E
 import Page.Learn.Scenario exposing (BasicMove(..), Fen(..), Move, PreviousMovesSafe)
+import Responsive exposing (Responsive)
 import Set exposing (Set)
 import Svg exposing (Svg, circle, g, path, svg)
 import Svg.Attributes as SvgAttr exposing (cx, cy, d, height, id, r, style, transform, version, viewBox, width, x, y, z)
@@ -1182,8 +1183,8 @@ parseCastlingRight t =
 --
 
 
-view : Model -> Html msg
-view (Model game) =
+view : Responsive -> Model -> Html msg
+view responsive (Model game) =
     --, movesHistorical, reinforcing, opponentReinforcing, playerTeam, dragStuff, browserBoard, mainNav, previousMove } =
     --    let
     --        sideBySide board =
@@ -1208,7 +1209,7 @@ view (Model game) =
                 [ --lazy2 viewTurn before playerTeam
                   --, Maybe.map2 (lazy4 viewPreviousMove before playerTeam) previousMove browserBoard |> Maybe.withDefault (span [] [])
                   --lazy3 viewBoard (SquareStuff before movesHistorical reinforcing opponentReinforcing playerTeam) dragStuff browserBoard
-                  lazy2 viewBoard (SquareStuff before (Historical []) [] [] Black) NoPieceInHand
+                  lazy3 viewBoard responsive (SquareStuff before (Historical []) [] [] Black) NoPieceInHand
                 ]
 
         DoneAnimating g ->
@@ -1216,7 +1217,7 @@ view (Model game) =
             div [ class "container mx-auto flex-grow" ]
                 [ --lazy2 viewTurn g playerTeam
                   -- Maybe.map (lazy4 viewGhostSquare g playerTeam dragStuff) browserBoard |> Maybe.withDefault (span [] [])
-                  lazy2 viewBoard (SquareStuff g (Historical []) [] [] Black) NoPieceInHand
+                  lazy3 viewBoard responsive (SquareStuff g (Historical []) [] [] Black) NoPieceInHand
 
                 --, lazy viewSettings playerTeam
                 ]
@@ -1260,15 +1261,18 @@ type alias SquareStuff =
     }
 
 
-viewBoard : SquareStuff -> DragStuff -> Html msg
-viewBoard ({ game, playerColor, historical } as cellStuff) dragStuff =
+viewBoard : Responsive -> SquareStuff -> DragStuff -> Html msg
+viewBoard responsive ({ game, playerColor, historical } as cellStuff) dragStuff =
     div []
         [ div
             [ id "main-board"
             , classList
-                [ ( "h-96 w-96 md:h-constrained-1/2 md:w-constrained-1/2 lg:h-constrained-40% lg:w-constrained-40% 2xl:h-constrained-40% 2xl:w-constrained-40% grid grid-cols-8 grid-rows-8 border-2 border-gray-500 gap-0 shadow-2xl", True )
+                [ ( "grid grid-cols-8 grid-rows-8 border-2 border-gray-500 gap-0 shadow-2xl", True )
+
+                --[ ( "h-96 w-96 md:h-constrained-1/2 md:w-constrained-1/2 lg:h-constrained-40% lg:w-constrained-40% 2xl:h-constrained-40% 2xl:w-constrained-40% grid grid-cols-8 grid-rows-8 border-2 border-gray-500 gap-0 shadow-2xl", True )
                 , ( "rotated", playerColor == White )
                 ]
+            , Responsive.square responsive
             ]
             (List.concatMap (viewRow cellStuff) (List.range 1 8))
         ]

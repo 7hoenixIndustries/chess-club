@@ -8,6 +8,7 @@ module Vote.Main exposing (view)
 import Chess.Logic as Logic
 import Html exposing (Html, a, dd, div, dl, dt, h3, li, nav, p, span, text, ul)
 import Html.Attributes as Attr exposing (class)
+import Responsive exposing (Responsive)
 import Svg exposing (path, svg)
 import Svg.Attributes as SvgAttr
 
@@ -16,8 +17,8 @@ type Model
     = Model
 
 
-view : Logic.Model -> Html msg
-view chessModel =
+view : Responsive -> Logic.Model -> Html msg
+view responsive chessModel =
     let
         emptyState =
             Html.text ""
@@ -25,13 +26,13 @@ view chessModel =
     --emptyState
     {- This example requires Tailwind CSS v2.0+ -}
     div []
-        [ card chessModel
+        [ card responsive chessModel
 
         --, viewSelection
         ]
 
 
-card chessModel =
+card responsive chessModel =
     {- This example requires Tailwind CSS v2.0+ -}
     div
         [ Attr.class "bg-white shadow overflow-hidden sm:rounded-lg"
@@ -41,7 +42,7 @@ card chessModel =
 
             --Attr.class "px-4 py-5 sm:px-6"
             ]
-            [ viewSelection chessModel
+            [ viewSelection responsive chessModel
             , viewNavigation
             ]
         ]
@@ -213,14 +214,16 @@ card chessModel =
 --]
 
 
-viewSelection chessModel =
+viewSelection : Responsive -> Logic.Model -> Html msg
+viewSelection responsive chessModel =
     let
         sideBySide rightSide =
             div [ class "flex flex-col sm:flex-col md:flex-col lg:flex-row xl:flex-row 2xl:flex-row" ]
-                [ div [ class "flex-grow flex-shrink-0" ] [ Logic.view chessModel ]
-                , div [ class "flex-shrink-0" ]
-                    rightSide
+                [ div [ class "flex-grow flex-shrink-0 ml-8 p-4" ] [ Logic.view responsive chessModel ]
+                , div [ class "flex-shrink-0 mr-8 p-4" ] rightSide
 
+                --[ div [ class "flex-grow flex-shrink-0" ] [ Logic.view responsive chessModel ]
+                --, div [ class "flex-shrink-0" ] rightSide
                 --[
                 -- --div [] [ h3 [ Attr.class "text-xl h-16" ] [ text "Details" ] ]
                 ----, viewLegend

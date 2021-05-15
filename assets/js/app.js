@@ -30,7 +30,9 @@ document.addEventListener("DOMContentLoaded", function() {
   const app = Elm.Main.init({
       flags: {
         backendEndpoint: document.querySelector('body').dataset.backendEndpoint,
-        authToken: authToken
+        authToken: authToken,
+        width: document.documentElement.clientWidth,
+        height: document.documentElement.clientHeight
       }
   });
   app.ports.createSubscriptions.subscribe(function(subscription) {

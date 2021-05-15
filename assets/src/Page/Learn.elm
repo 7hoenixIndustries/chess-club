@@ -39,6 +39,7 @@ import Js
 import Json.Decode
 import Page.Learn.Scenario as Scenario exposing (Fen(..), Move, scenarioSelection, subscribeToMoves)
 import Prelude
+import Responsive exposing (Responsive)
 import Session
 import Set exposing (Set)
 import Skeleton
@@ -341,24 +342,25 @@ stepChess model ( chessModel, chessCmds ) =
 -- VIEW
 
 
-view : Model -> Skeleton.Details Msg
-view model =
-    { title = "Learn"
-    , navbarOpen = False
-    , header = []
-    , warning = Skeleton.NoProblems
-    , attrs = [ class "container mx-auto px-4" ]
-    , children =
-        case model of
-            Joining chessState internal ->
-                [ Vote.Main.view chessState
-                ]
+view : Responsive -> Model -> Skeleton.Details Msg
+view responsive model =
+    Skeleton.Details
+        { title = "Learn"
+        , navbarOpen = False
+        , header = []
+        , warning = Skeleton.NoProblems
+        , attrs = [ class "container mx-auto px-4" ]
+        , children =
+            case model of
+                Joining chessState internal ->
+                    [ Vote.Main.view responsive chessState
+                    ]
 
-            Learning internal ->
-                [ lazy3 viewLearn internal.scenario internal.chessModel internal.subscriptionStatus
-                , lazy viewScenarios internal.scenarios
-                ]
-    }
+                Learning internal ->
+                    [ lazy3 viewLearn internal.scenario internal.chessModel internal.subscriptionStatus
+                    , lazy viewScenarios internal.scenarios
+                    ]
+        }
 
 
 viewConnection : SubscriptionStatus -> Html Msg

@@ -1080,7 +1080,8 @@ subscriptions model =
 
             PieceInHand _ ->
                 onMouseMove (D.map2 MoveDragging pageX pageY)
-        , Browser.Events.onResize (\w h -> WindowResized)
+
+        --, Browser.Events.onResize (\w h -> WindowResized)
         ]
 
 
